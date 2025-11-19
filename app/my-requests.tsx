@@ -14,17 +14,22 @@ const filters = ['Todos', 'Bodas', 'Cumpleaños', 'Otros'];
 
 const RequestCard = ({ request, router }: { request: { id: string; title: string; service: string; status: string; icon: any }, router: any }) => (
   <View style={styles.requestCard}>
-    <View style={styles.cardContent}>
-      <Text style={styles.cardTitle}>{request.title}</Text>
-      <View style={styles.serviceInfo}>
-        <Ionicons name={request.icon} size={16} color="#ef4444" />
-        <Text style={styles.serviceText}>{request.service}</Text>
+    <Text style={[styles.cardTitle, {color: '#ef4444'}]}>Categoría: {request.service}</Text>
+    {/* Services section */}
+    <View style={styles.servicesContainer}>
+      <View style={styles.serviceItem}>
+        <Ionicons name={request.icon} size={18} color="#ef4444" />
+        <Text style={styles.serviceTextNew}>{request.service}</Text>
       </View>
-      <Text style={styles.statusText}>Estado: {request.status}</Text>
     </View>
-    <TouchableOpacity style={styles.reviewButton} onPress={() => router.push(`/request-detail/${request.id}`)}>
-      <Text style={styles.reviewButtonText}>Revisar</Text>
-    </TouchableOpacity>
+
+    {/* Footer of the Card */}
+    <View style={styles.cardFooter}>
+      <Text style={styles.statusText}>Estado: {request.status}</Text>
+      <TouchableOpacity style={styles.reviewButton} onPress={() => router.push(`/request-detail/${request.id}`)}>
+        <Text style={styles.reviewButtonText}>Revisar</Text>
+      </TouchableOpacity>
+    </View>
   </View>
 );
 
@@ -67,11 +72,10 @@ export default function MyRequestsScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: '#f9fafb',
   },
   card: {
     flex: 1,
-    backgroundColor: 'white',
     paddingHorizontal: 20,
   },
   header: {
@@ -99,14 +103,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#ef4444',
   },
   pillInactive: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#e5e7eb',
   },
   pillTextActive: {
     color: 'white',
     fontWeight: 'bold',
   },
   pillTextInactive: {
-    color: '#374151',
+    color: 'black',
     fontWeight: '500',
   },
   list: {
@@ -114,47 +118,56 @@ const styles = StyleSheet.create({
   },
   requestCard: {
     backgroundColor: 'white',
-    borderRadius: 15,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: '#fca5a5',
-    padding: 15,
+    padding: 20,
     marginBottom: 15,
+  },
+  servicesContainer: {
+    marginTop: 10,
+    marginBottom: 15,
+  },
+  serviceItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    marginBottom: 5,
   },
-  cardContent: {
-    flex: 1,
+  serviceTextNew: { // New style for service text
+    marginLeft: 10,
+    fontSize: 15,
+    color: '#ef4444',
+    fontWeight: 'bold',
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 15,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
   },
   cardTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#ef4444',
-  },
-  serviceInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 5,
-  },
-  serviceText: {
-    marginLeft: 5,
-    fontSize: 14,
-    color: '#374151',
+    color: '#333',
+    marginBottom: 10,
   },
   statusText: {
-    fontSize: 12,
+    fontSize: 14,
     color: 'gray',
+    fontWeight: '500',
   },
   reviewButton: {
     backgroundColor: '#ef4444',
-    borderRadius: 10,
+    borderRadius: 25, // More rounded for pill shape
     paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginLeft: 10,
+    paddingHorizontal: 15, // Comfortable horizontal padding
   },
   reviewButtonText: {
     color: 'white',
     fontWeight: 'bold',
-    fontSize: 12,
+    fontSize: 14,
   },
 });
