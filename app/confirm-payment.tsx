@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,22 +7,195 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Alert,
+  ActivityIndicator
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import { supabase } from '../lib/supabase';
 
 export default function ConfirmPaymentScreen() {
   const router = useRouter();
-  const [paymentMethod, setPaymentMethod] = useState('Tarjeta'); // 'Tarjeta' or 'Transferencia'
+  const { quoteId } = useLocalSearchParams();
+  const [paymentMethod, setPaymentMethod] = useState('Tarjeta'); 
+  const [quote, setQuote] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
 
-  const handleConfirmPayment = () => {
-    Alert.alert('Pago Exitoso', 'Tu pago ha sido procesado y el proveedor ha sido confirmado.', [
-      {
-        text: 'OK',
-        onPress: () => router.replace('/reservation-confirmed'),
-      },
-    ]);
+  useEffect(() => {
+    if (quoteId) {
+      fetchQuoteDetails();
+    }
+  }, [quoteId]);
+
+  const fetchQuoteDetails = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('quotes')
+        .select(`
+          id,
+          proposed_price,
+          provider_id,
+          request_id,
+          profiles:provider_id (
+            full_name,
+            business_name
+          ),
+          requests (
+            id,
+            title,
+            client_id,
+            event_date,
+            event_time,
+            event_id,
+            location,
+            address,
+            guest_count,
+            service_categories (
+              name
+            )
+          )
+        `)
+        .eq('id', quoteId)
+        .single();
+
+      if (error) throw error;
+      setQuote(data);
+    } catch (error) {
+      console.error('Error fetching quote:', error);
+      Alert.alert('Error', 'No se pudieron cargar los detalles del pago.');
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const handleConfirmPayment = async () => {
+    if (!quote) return;
+    setProcessing(true);
+
+    try {
+      const clientId = quote.requests.client_id;
+      const providerId = quote.provider_id;
+      const requestId = quote.request_id;
+      const price = quote.proposed_price;
+      const serviceName = quote.requests.service_categories?.name || quote.requests.title;
+      const serviceDate = quote.requests.event_date;
+      const serviceTime = quote.requests.event_time;
+      
+      let eventId = quote.requests.event_id;
+
+      // 0. Ensure Event Exists
+      if (!eventId) {
+          const { data: newEvent, error: eventError } = await supabase
+            .from('events')
+            .insert({
+                client_id: clientId,
+                title: quote.requests.title,
+                event_date: serviceDate,
+                event_time: serviceTime,
+                location: quote.requests.location,
+                address: quote.requests.address,
+                guest_count: quote.requests.guest_count,
+                status: 'confirmed'
+            })
+            .select('id')
+            .single();
+          
+          if (eventError) throw eventError;
+          eventId = newEvent.id;
+
+          // Link event to request
+          await supabase
+            .from('requests')
+            .update({ event_id: eventId })
+            .eq('id', requestId);
+      }
+
+      // 1. Create Payment Record (Mocking success)
+      const { data: paymentData, error: paymentError } = await supabase
+        .from('payments')
+        .insert({
+          quote_id: quoteId,
+          client_id: clientId,
+          provider_id: providerId,
+          amount: price,
+          payment_method: paymentMethod,
+          status: 'completed',
+          paid_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (paymentError) throw paymentError;
+
+      // 2. Update Quote Status
+      const { error: quoteUpdateError } = await supabase
+        .from('quotes')
+        .update({ status: 'accepted' })
+        .eq('id', quoteId);
+
+      if (quoteUpdateError) throw quoteUpdateError;
+
+      // 3. Update Request Status
+      const { error: requestUpdateError } = await supabase
+        .from('requests')
+        .update({ status: 'hired' })
+        .eq('id', requestId);
+
+      if (requestUpdateError) throw requestUpdateError;
+
+      // 4. Create Hired Service (The Ticket/Reservation)
+      const { error: hiredServiceError } = await supabase
+        .from('hired_services')
+        .insert({
+          event_id: eventId,
+          quote_id: quoteId,
+          client_id: clientId,
+          provider_id: providerId,
+          service_name: serviceName,
+          service_date: serviceDate,
+          service_time: serviceTime,
+          price_paid: price,
+          status: 'reserved',
+          payment_id: paymentData.id
+        });
+
+      if (hiredServiceError) throw hiredServiceError;
+
+      Alert.alert('Pago Exitoso', 'Tu pago ha sido procesado y el proveedor ha sido confirmado.', [
+        {
+          text: 'OK',
+          onPress: () => router.replace('/reservation-confirmed'),
+        },
+      ]);
+
+    } catch (error: any) {
+      console.error('Error processing payment:', error);
+      Alert.alert('Error', error.message || 'Hubo un problema al procesar el pago.');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  if (loading) {
+    return (
+        <SafeAreaView style={styles.safeArea}>
+            <View style={[styles.container, {justifyContent: 'center', alignItems: 'center'}]}>
+                <ActivityIndicator size="large" color="#ef4444" />
+            </View>
+        </SafeAreaView>
+    )
+  }
+
+  if (!quote) {
+      return (
+          <SafeAreaView style={styles.safeArea}>
+              <View style={styles.container}>
+                  <Text style={{textAlign: 'center', marginTop: 20}}>No se encontró la información.</Text>
+              </View>
+          </SafeAreaView>
+      )
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -44,25 +217,27 @@ export default function ConfirmPaymentScreen() {
                 <Text style={styles.avatarText}>PRO</Text>
               </View>
               <View style={styles.providerInfo}>
-                <Text style={styles.providerTitle}>Sonido e Iluminación Pro</Text>
+                <Text style={styles.providerTitle}>
+                    {quote.profiles?.business_name || quote.profiles?.full_name || 'Proveedor'}
+                </Text>
                 <Text style={styles.providerSubtitle}>Proveedor de servicios</Text>
               </View>
             </View>
 
             {/* Services Included */}
-            <Text style={styles.servicesIncludedTitle}>Servicios Incluidos:</Text>
+            <Text style={styles.servicesIncludedTitle}>Servicio a Contratar:</Text>
             <View style={styles.serviceList}>
               <View style={styles.serviceItem}>
-                <FontAwesome5 name="circle" size={8} color="black" style={styles.bullet} solid />
-                <Text style={styles.serviceItemText}>DJ por 4 horas</Text>
+                <FontAwesome5 name="check-circle" size={14} color="#ef4444" style={styles.bullet} solid />
+                <Text style={styles.serviceItemText}>
+                    {quote.requests?.service_categories?.name || quote.requests?.title}
+                </Text>
               </View>
               <View style={styles.serviceItem}>
-                <FontAwesome5 name="circle" size={8} color="black" style={styles.bullet} solid />
-                <Text style={styles.serviceItemText}>Sistema de sonido profesional</Text>
-              </View>
-              <View style={styles.serviceItem}>
-                <FontAwesome5 name="circle" size={8} color="black" style={styles.bullet} solid />
-                <Text style={styles.serviceItemText}>Luces de ambiente LED</Text>
+                <FontAwesome5 name="calendar-alt" size={14} color="#555" style={styles.bullet} solid />
+                <Text style={styles.serviceItemText}>
+                    Fecha: {quote.requests?.event_date}
+                </Text>
               </View>
             </View>
 
@@ -70,13 +245,13 @@ export default function ConfirmPaymentScreen() {
             <View style={styles.priceSeparator} />
             <View style={styles.priceSection}>
               <Text style={styles.priceLabel}>Precio Total:</Text>
-              <Text style={styles.totalPrice}>$1,250.00</Text>
+              <Text style={styles.totalPrice}>${quote.proposed_price}</Text>
             </View>
 
             {/* Policy Note */}
             <View style={styles.policyNoteContainer}>
               <Text style={styles.policyNoteText}>
-                Cancelación gratuita hasta 72h antes del evento.
+                Al confirmar, aceptas los términos y condiciones de FestEasy.
               </Text>
             </View>
           </View>
@@ -117,9 +292,19 @@ export default function ConfirmPaymentScreen() {
 
         {/* Fixed Footer Button */}
         <View style={styles.footer}>
-          <TouchableOpacity style={styles.payButton} onPress={handleConfirmPayment}>
-            <FontAwesome5 name="lock" size={18} color="white" style={styles.payButtonIcon} />
-            <Text style={styles.payButtonText}>Pagar y Confirmar</Text>
+          <TouchableOpacity 
+            style={[styles.payButton, processing && styles.payButtonDisabled]} 
+            onPress={handleConfirmPayment}
+            disabled={processing}
+          >
+            {processing ? (
+                <ActivityIndicator color="white" />
+            ) : (
+                <>
+                    <FontAwesome5 name="lock" size={18} color="white" style={styles.payButtonIcon} />
+                    <Text style={styles.payButtonText}>Pagar y Confirmar</Text>
+                </>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -152,13 +337,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#000',
-    flex: 1, // To center the title
-    textAlign: 'center', // To center the title
-    marginLeft: -35, // Adjust for back button
+    flex: 1, 
+    textAlign: 'center', 
+    marginLeft: -35, 
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 100, // Space for the fixed footer
+    paddingBottom: 100, 
   },
   summaryCard: {
     backgroundColor: '#fff',
@@ -180,7 +365,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#f3e8d8', // Beige
+    backgroundColor: '#f3e8d8', 
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,
@@ -219,7 +404,6 @@ const styles = StyleSheet.create({
   },
   bullet: {
     marginRight: 10,
-    color: '#000',
   },
   serviceItemText: {
     fontSize: 15,
@@ -310,6 +494,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  payButtonDisabled: {
+      backgroundColor: '#fca5a5'
   },
   payButtonIcon: {
     marginRight: 10,

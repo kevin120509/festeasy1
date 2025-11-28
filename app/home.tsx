@@ -47,16 +47,51 @@ export default function HomeScreen() {
     }
   };
 
-  const renderService = ({ item }: { item: { id: string; name: string; icon: string } }) => (
-    <TouchableOpacity 
-      style={styles.serviceButton} 
-      onPress={() => router.push({ pathname: '/service-request', params: { categoryId: item.id, categoryName: item.name } })}
-    >
-      {/* Fallback icon if the icon name from DB isn't valid in Ionicons, or handle mapping */}
-      <Ionicons name={item.icon as any || 'apps'} size={22} color="#ef4444" />
-      <Text style={styles.serviceText}>{item.name}</Text>
-    </TouchableOpacity>
-  );
+  const getCategoryIcon = (categoryName: string) => {
+    const normalized = categoryName.toLowerCase();
+    
+    if (normalized.includes('decoración') || normalized.includes('globos')) {
+      return { Lib: MaterialCommunityIcons, name: 'balloon' };
+    }
+    if (normalized.includes('catering') || normalized.includes('comida') || normalized.includes('alimentos')) {
+      return { Lib: MaterialCommunityIcons, name: 'silverware-fork-knife' };
+    }
+    if (normalized.includes('música') || normalized.includes('dj') || normalized.includes('sonido')) {
+      return { Lib: Ionicons, name: 'musical-notes' };
+    }
+    if (normalized.includes('foto') || normalized.includes('video')) {
+      return { Lib: Ionicons, name: 'camera' };
+    }
+    if (normalized.includes('mobiliario') || normalized.includes('sillas') || normalized.includes('mesas')) {
+      return { Lib: MaterialCommunityIcons, name: 'table-chair' };
+    }
+    if (normalized.includes('montaje') || normalized.includes('carpas')) {
+      return { Lib: MaterialCommunityIcons, name: 'hammer-wrench' };
+    }
+    if (normalized.includes('animación') || normalized.includes('entretenimiento')) {
+      return { Lib: FontAwesome, name: 'magic' };
+    }
+    if (normalized.includes('bebidas') || normalized.includes('barra')) {
+      return { Lib: MaterialCommunityIcons, name: 'glass-cocktail' };
+    }
+    
+    // Default
+    return { Lib: Ionicons, name: 'apps' };
+  };
+
+  const renderService = ({ item }: { item: { id: string; name: string; icon: string } }) => {
+    const { Lib, name } = getCategoryIcon(item.name);
+
+    return (
+      <TouchableOpacity 
+        style={styles.serviceButton} 
+        onPress={() => router.push({ pathname: '/service-request', params: { categoryId: item.id, categoryName: item.name } })}
+      >
+        <Lib name={name as any} size={24} color="#ef4444" />
+        <Text style={styles.serviceText}>{item.name}</Text>
+      </TouchableOpacity>
+    );
+  };
 
   const renderNavItem = (item: { name: string; icon: any; active: boolean; route: string }) => (
     <TouchableOpacity key={item.name} style={styles.navItem} onPress={() => item.route && router.push(item.route)}>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,16 +6,89 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
+import { supabase } from '../lib/supabase';
 
 export default function ReservationConfirmedScreen() {
   const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [reservation, setReservation] = useState<any>(null);
+
+  useEffect(() => {
+    fetchLatestReservation();
+  }, []);
+
+  const fetchLatestReservation = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Fetch the most recently created hired_service for this client
+      const { data, error } = await supabase
+        .from('hired_services')
+        .select(`
+          id,
+          service_name,
+          service_date,
+          service_time,
+          price_paid,
+          status,
+          profiles:provider_id (
+            full_name,
+            business_name,
+            phone,
+            email
+          ),
+          events (
+            location,
+            address
+          )
+        `)
+        .eq('client_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error) throw error;
+      setReservation(data);
+    } catch (error) {
+      console.error('Error fetching reservation:', error);
+      Alert.alert('Error', 'No se pudo cargar la información de la reserva.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleGoHome = () => {
-    router.replace('/'); // Navigates to the home screen and resets the stack
+    router.replace('/home'); 
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="large" color="#16a34a" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!reservation) {
+     return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+          <Text>No se encontró la reserva.</Text>
+          <TouchableOpacity onPress={handleGoHome} style={{marginTop: 20}}>
+             <Text style={{color: '#16a34a'}}>Volver al inicio</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -35,10 +108,12 @@ export default function ReservationConfirmedScreen() {
             {/* Provider Info */}
             <View style={styles.providerRow}>
               <View style={styles.providerAvatar}>
-                <MaterialCommunityIcons name="silverware-fork-knife" size={24} color="#16a34a" />
+                <MaterialCommunityIcons name="store" size={24} color="#fff" />
               </View>
               <View style={styles.providerTextGroup}>
-                <Text style={styles.providerName}>Sabores del Chef Catering</Text>
+                <Text style={styles.providerName}>
+                    {reservation.profiles?.business_name || reservation.profiles?.full_name}
+                </Text>
                 <Text style={styles.providerLabel}>Proveedor</Text>
               </View>
             </View>
@@ -49,19 +124,27 @@ export default function ReservationConfirmedScreen() {
               <View style={styles.infoIconContainer}>
                 <Ionicons name="calendar-outline" size={20} color="#ef4444" />
               </View>
-              <Text style={styles.infoText}>Sábado, 26 de Octubre - 4:00 PM</Text>
+              <Text style={styles.infoText}>
+                  {reservation.service_date} - {reservation.service_time}
+              </Text>
             </View>
+            
             <View style={styles.infoRow}>
               <View style={styles.infoIconContainer}>
                 <Ionicons name="location-outline" size={20} color="#ef4444" />
               </View>
-              <Text style={styles.infoText}>Av. Siempre Viva 742, Springfield</Text>
+              <Text style={styles.infoText}>
+                  {reservation.events?.address || reservation.events?.location || 'Ubicación del evento'}
+              </Text>
             </View>
+
             <View style={styles.infoRow}>
               <View style={styles.infoIconContainer}>
                 <Ionicons name="receipt-outline" size={20} color="#ef4444" />
               </View>
-              <Text style={styles.infoText}>Paquete Fiesta Completa <Text style={styles.infoPrice}>$1,250.00</Text></Text>
+              <Text style={styles.infoText}>
+                  {reservation.service_name} <Text style={styles.infoPrice}>${reservation.price_paid}</Text>
+              </Text>
             </View>
           </View>
 

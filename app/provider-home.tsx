@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   FlatList,
-  ScrollView,
   ActivityIndicator,
   RefreshControl,
   Alert,
@@ -38,6 +37,7 @@ export default function ProviderHomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [newRequests, setNewRequests] = useState<Request[]>([]);
+  const [hasServices, setHasServices] = useState(true);
 
   const fetchProviderData = useCallback(async () => {
     try {
@@ -50,7 +50,25 @@ export default function ProviderHomeScreen() {
         return;
       }
 
-      // 1. Get all quotes made by this provider to exclude them
+      // 1. Get the categories this provider offers
+      const { data: myServices, error: servicesError } = await supabase
+        .from('services')
+        .select('category_id')
+        .eq('provider_id', user.id);
+
+      if (servicesError) throw servicesError;
+
+      // If provider hasn't registered any services, they shouldn't see requests
+      if (!myServices || myServices.length === 0) {
+          setHasServices(false);
+          setNewRequests([]);
+          return;
+      }
+      setHasServices(true);
+
+      const myCategoryIds = myServices.map(s => s.category_id);
+
+      // 2. Get quotes made by this provider to exclude them
       const { data: myQuotes, error: quotesError } = await supabase
         .from('quotes')
         .select('request_id')
@@ -60,7 +78,7 @@ export default function ProviderHomeScreen() {
 
       const myQuoteRequestIds = myQuotes?.map(q => q.request_id) || [];
 
-      // 2. Get all OPEN requests
+      // 3. Get OPEN requests that MATCH the provider's categories
       const { data: allRequests, error: requestsError } = await supabase
         .from('requests')
         .select(`
@@ -68,12 +86,14 @@ export default function ProviderHomeScreen() {
           title,
           event_date,
           status,
+          category_id,
           service_categories (
             name,
             icon
           )
         `)
-        .eq('status', 'open') // Only open requests
+        .eq('status', 'open')
+        .in('category_id', myCategoryIds) // FILTER: Match provider's categories
         .order('created_at', { ascending: false });
 
       if (requestsError) throw requestsError;
@@ -82,7 +102,7 @@ export default function ProviderHomeScreen() {
 
       allRequests?.forEach((req: any) => {
         if (!myQuoteRequestIds.includes(req.id)) {
-          // New request available to quote (not quoted by me yet)
+          // New request (not quoted yet) AND matches category
           newReqs.push(req);
         }
       });
@@ -145,8 +165,17 @@ export default function ProviderHomeScreen() {
 
         <View style={styles.welcomeSection}>
           <Text style={styles.welcomeText}>Solicitudes Disponibles</Text>
-          <Text style={styles.subtitle}>Aquí puedes encontrar eventos que buscan tus servicios.</Text>
+          <Text style={styles.subtitle}>Basado en los servicios que ofreces.</Text>
         </View>
+
+        {!hasServices && !loading && (
+            <View style={styles.warningCard}>
+                <Ionicons name="alert-circle" size={24} color="#d97706" />
+                <Text style={styles.warningText}>
+                    No has registrado servicios. Configura tu perfil para ver solicitudes.
+                </Text>
+            </View>
+        )}
 
         {loading && !refreshing ? (
             <ActivityIndicator size="large" color="#ef4444" style={{marginTop: 50}} />
@@ -160,7 +189,11 @@ export default function ProviderHomeScreen() {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
-                        <Text style={styles.emptyStateText}>No hay solicitudes nuevas disponibles en este momento.</Text>
+                        <Text style={styles.emptyStateText}>
+                            {hasServices 
+                                ? "No hay solicitudes nuevas en tus categorías." 
+                                : "Registra un servicio para empezar."}
+                        </Text>
                     </View>
                 }
             />
@@ -299,6 +332,22 @@ const styles = StyleSheet.create({
     marginTop: 0,
     fontSize: 14,
     textAlign: 'center',
+  },
+  warningCard: {
+      flexDirection: 'row',
+      backgroundColor: '#fffbeb',
+      padding: 15,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: '#fcd34d',
+      marginBottom: 20,
+      alignItems: 'center',
+  },
+  warningText: {
+      color: '#b45309',
+      marginLeft: 10,
+      flex: 1,
+      fontSize: 13,
   },
   navBar: {
     flexDirection: 'row',
