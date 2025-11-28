@@ -11,18 +11,34 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 
 export default function ServiceRequestScreen() {
   const router = useRouter();
-  const { categoryId, categoryName } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  
+  // Cast params to string, providing default empty strings
+  const { 
+    id, 
+    categoryId, 
+    categoryName,
+    description: initialDescription,
+    eventDate: initialEventDate,
+    eventTime: initialEventTime,
+    location: initialLocation,
+    guestCount: initialGuestCount
+  } = Object.fromEntries(
+    Object.entries(params).map(([key, value]) => [key, String(value || '')])
+  );
 
-  const [description, setDescription] = useState('');
-  const [eventDate, setEventDate] = useState('');
-  const [eventTime, setEventTime] = useState('');
-  const [location, setLocation] = useState('');
-  const [guestCount, setGuestCount] = useState('');
+  const isEditing = !!id;
+
+  const [description, setDescription] = useState(initialDescription);
+  const [eventDate, setEventDate] = useState(initialEventDate);
+  const [eventTime, setEventTime] = useState(initialEventTime);
+  const [location, setLocation] = useState(initialLocation);
+  const [guestCount, setGuestCount] = useState(initialGuestCount);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
@@ -42,29 +58,49 @@ export default function ServiceRequestScreen() {
         return;
       }
 
-      const { error } = await supabase.from('requests').insert({
-        client_id: user.id,
-        category_id: categoryId, // Assuming categoryId is passed correctly
-        title: `Solicitud de ${categoryName || 'Servicio'}`, // Default title
+      const requestData = {
         description: description,
-        event_date: eventDate, // Ensure this format matches DB (YYYY-MM-DD) or let Supabase handle flexible date strings if configured
+        event_date: eventDate,
         event_time: eventTime,
         location: location,
-        address: location, // Using location as address for now
+        address: location,
         guest_count: parseInt(guestCount),
-        status: 'open'
-      });
+        // Don't update status on edit, let it keep its current status
+      };
+
+      let error;
+
+      if (isEditing) {
+        const { error: updateError } = await supabase
+          .from('requests')
+          .update(requestData)
+          .eq('id', id);
+        error = updateError;
+      } else {
+        const { error: insertError } = await supabase.from('requests').insert({
+          ...requestData,
+          client_id: user.id,
+          category_id: categoryId,
+          title: `Solicitud de ${categoryName || 'Servicio'}`,
+          status: 'open'
+        });
+        error = insertError;
+      }
 
       if (error) {
         throw error;
       }
 
-      Alert.alert('Éxito', 'Solicitud enviada correctamente', [
-        { text: 'OK', onPress: () => router.push('/my-requests') }
-      ]);
+      Alert.alert(
+        'Éxito', 
+        `Solicitud ${isEditing ? 'actualizada' : 'enviada'} correctamente`, 
+        [
+          { text: 'OK', onPress: () => router.replace(isEditing ? `/my-requests` : '/home') }
+        ]
+      );
 
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Hubo un problema al enviar la solicitud.');
+      Alert.alert('Error', error.message || `Hubo un problema al ${isEditing ? 'actualizar' : 'enviar'} la solicitud.`);
     } finally {
       setLoading(false);
     }
@@ -79,7 +115,7 @@ export default function ServiceRequestScreen() {
           </TouchableOpacity>
         </View>
         <ScrollView showsVerticalScrollIndicator={false}>
-            <Text style={styles.title}>Describe lo que necesitas para {categoryName}</Text>
+            <Text style={styles.title}>{isEditing ? 'Editar Solicitud' : `Describe lo que necesitas para ${categoryName}`}</Text>
 
             {/* Description Input */}
             <View style={styles.inputGroup}>
@@ -158,7 +194,7 @@ export default function ServiceRequestScreen() {
                 {loading ? (
                   <ActivityIndicator color="white" />
                 ) : (
-                  <Text style={styles.submitButtonText}>Enviar solicitud</Text>
+                  <Text style={styles.submitButtonText}>{isEditing ? 'Guardar Cambios' : 'Enviar solicitud'}</Text>
                 )}
             </TouchableOpacity>
         </ScrollView>

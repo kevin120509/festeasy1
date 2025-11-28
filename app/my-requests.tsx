@@ -83,6 +83,7 @@ export default function MyRequestsScreen() {
           )
         `)
         .eq('client_id', user.id)
+        .neq('status', 'cancelled') // Exclude cancelled requests
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -103,7 +104,7 @@ export default function MyRequestsScreen() {
     // Simple status mapping for demo purposes
     if (activeFilter === 'Pendientes') return req.status === 'open' || req.status === 'quoted';
     if (activeFilter === 'Confirmados') return req.status === 'hired';
-    if (activeFilter === 'Finalizados') return req.status === 'completed' || req.status === 'cancelled';
+    if (activeFilter === 'Finalizados') return req.status === 'completed'; // 'cancelled' is now excluded at fetch level
     return true;
   });
 
