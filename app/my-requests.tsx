@@ -1,31 +1,48 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
+import { supabase } from '../lib/supabase';
 
-const requests = [
-  { id: '1', title: 'Boda en la playa', service: 'Decoración', status: 'pendiente', icon: 'flower-outline' },
-  { id: '2', title: 'Cumpleaños Infantil', service: 'Catering', status: 'en progreso', icon: 'fast-food-outline' },
-  { id: '3', title: 'Evento Corporativo', service: 'Música / DJ', status: 'finalizado', icon: 'musical-notes-outline' },
-];
+// Define interface for the request data
+interface Request {
+  id: string;
+  title: string;
+  status: string;
+  created_at: string;
+  service_categories: {
+    name: string;
+    icon: string;
+  } | null;
+}
 
-const filters = ['Todos', 'Bodas', 'Cumpleaños', 'Otros'];
+const filters = ['Todos', 'Pendientes', 'Confirmados', 'Finalizados'];
 
-const RequestCard = ({ request, router }: { request: { id: string; title: string; service: string; status: string; icon: any }, router: any }) => (
+const RequestCard = ({ request, router }: { request: Request; router: any }) => (
   <View style={styles.requestCard}>
-    <Text style={[styles.cardTitle, {color: '#ef4444'}]}>Categoría: {request.service}</Text>
+    <Text style={[styles.cardTitle, {color: '#ef4444'}]}>
+      {request.title}
+    </Text>
     {/* Services section */}
     <View style={styles.servicesContainer}>
       <View style={styles.serviceItem}>
-        <Ionicons name={request.icon} size={18} color="#ef4444" />
-        <Text style={styles.serviceTextNew}>{request.service}</Text>
+        <Ionicons 
+          name={(request.service_categories?.icon as any) || 'apps-outline'} 
+          size={18} 
+          color="#ef4444" 
+        />
+        <Text style={styles.serviceTextNew}>
+          {request.service_categories?.name || 'Servicio General'}
+        </Text>
       </View>
     </View>
 
     {/* Footer of the Card */}
     <View style={styles.cardFooter}>
-      <Text style={styles.statusText}>Estado: {request.status}</Text>
+      <Text style={styles.statusText}>
+        Estado: <Text style={{fontWeight: 'bold', textTransform: 'capitalize'}}>{request.status}</Text>
+      </Text>
       <TouchableOpacity style={styles.reviewButton} onPress={() => router.push(`/request-detail/${request.id}`)}>
         <Text style={styles.reviewButtonText}>Revisar</Text>
       </TouchableOpacity>
@@ -35,6 +52,60 @@ const RequestCard = ({ request, router }: { request: { id: string; title: string
 
 export default function MyRequestsScreen() {
   const router = useRouter();
+  const [requests, setRequests] = useState<Request[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeFilter, setActiveFilter] = useState('Todos');
+
+  useEffect(() => {
+    fetchRequests();
+  }, []);
+
+  const fetchRequests = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        Alert.alert('Error', 'Debes iniciar sesión para ver tus solicitudes.');
+        router.replace('/login');
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('requests')
+        .select(`
+          id,
+          title,
+          status,
+          created_at,
+          service_categories (
+            name,
+            icon
+          )
+        `)
+        .eq('client_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      setRequests(data as unknown as Request[]);
+    } catch (error: any) {
+      console.error('Error fetching requests:', error);
+      Alert.alert('Error', 'No se pudieron cargar las solicitudes.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredRequests = requests.filter(req => {
+    if (activeFilter === 'Todos') return true;
+    // Simple status mapping for demo purposes
+    if (activeFilter === 'Pendientes') return req.status === 'open' || req.status === 'quoted';
+    if (activeFilter === 'Confirmados') return req.status === 'hired';
+    if (activeFilter === 'Finalizados') return req.status === 'completed' || req.status === 'cancelled';
+    return true;
+  });
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -51,9 +122,10 @@ export default function MyRequestsScreen() {
           {filters.map((filter, index) => (
             <TouchableOpacity
               key={index}
-              style={[styles.pill, index === 0 ? styles.pillActive : styles.pillInactive]}
+              style={[styles.pill, activeFilter === filter ? styles.pillActive : styles.pillInactive]}
+              onPress={() => setActiveFilter(filter)}
             >
-              <Text style={index === 0 ? styles.pillTextActive : styles.pillTextInactive}>
+              <Text style={activeFilter === filter ? styles.pillTextActive : styles.pillTextInactive}>
                 {filter}
               </Text>
             </TouchableOpacity>
@@ -61,9 +133,19 @@ export default function MyRequestsScreen() {
         </View>
 
         {/* Request List */}
-        <ScrollView showsVerticalScrollIndicator={false} style={styles.list}>
-          {requests.map(req => <RequestCard key={req.id} request={req} router={router} />)}
-        </ScrollView>
+        {loading ? (
+            <ActivityIndicator size="large" color="#ef4444" style={{marginTop: 50}} />
+        ) : (
+            <ScrollView showsVerticalScrollIndicator={false} style={styles.list}>
+            {filteredRequests.length > 0 ? (
+                filteredRequests.map(req => <RequestCard key={req.id} request={req} router={router} />)
+            ) : (
+                <View style={styles.emptyState}>
+                    <Text style={styles.emptyStateText}>No tienes solicitudes {activeFilter !== 'Todos' ? 'en esta categoría' : ''}.</Text>
+                </View>
+            )}
+            </ScrollView>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -96,7 +178,7 @@ const styles = StyleSheet.create({
   },
   pill: {
     paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     borderRadius: 20,
   },
   pillActive: {
@@ -108,10 +190,12 @@ const styles = StyleSheet.create({
   pillTextActive: {
     color: 'white',
     fontWeight: 'bold',
+    fontSize: 12,
   },
   pillTextInactive: {
     color: 'black',
     fontWeight: '500',
+    fontSize: 12,
   },
   list: {
     flex: 1,
@@ -170,4 +254,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 14,
   },
+  emptyState: {
+      alignItems: 'center',
+      marginTop: 50,
+  },
+  emptyStateText: {
+      color: 'gray',
+      fontSize: 16,
+  }
 });

@@ -4,20 +4,13 @@ import {
   StyleSheet,
   TouchableOpacity,
   FlatList,
+  ActivityIndicator,
 } from 'react-native';
+import React, { useEffect, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons, FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
-
-const services = [
-  { id: '1', title: 'Decoración', icon: 'balloon' },
-  { id: '2', title: 'Catering', icon: 'fast-food' },
-  { id: '3', title: 'Música / DJ', icon: 'musical-notes' },
-  { id: '4', title: 'Foto y video', icon: 'camera' },
-  { id: '5', title: 'Mobiliario', icon: 'easel' },
-  { id: '6', title: 'Montaje', icon: 'build' },
-  { id: '7', title: 'Otro', icon: 'add-circle' },
-];
+import { supabase } from '../lib/supabase';
 
 const navItems = [
   { name: 'Inicio', icon: 'home', active: true, route: '/home' },
@@ -28,11 +21,40 @@ const navItems = [
 
 export default function HomeScreen() {
   const router = useRouter();
+  const [services, setServices] = useState<{ id: string; name: string; icon: string }[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const renderService = ({ item }: { item: { id: string; title: string; icon: any } }) => (
-    <TouchableOpacity style={styles.serviceButton} onPress={() => router.push('/service-request')}>
-      <Ionicons name={item.icon} size={22} color="#ef4444" />
-      <Text style={styles.serviceText}>{item.title}</Text>
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  const fetchCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('service_categories')
+        .select('id, name, icon')
+        .eq('active', true);
+
+      if (error) {
+        console.error('Error fetching categories:', error);
+      } else {
+        setServices(data || []);
+      }
+    } catch (error) {
+      console.error('Unexpected error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderService = ({ item }: { item: { id: string; name: string; icon: string } }) => (
+    <TouchableOpacity 
+      style={styles.serviceButton} 
+      onPress={() => router.push({ pathname: '/service-request', params: { categoryId: item.id, categoryName: item.name } })}
+    >
+      {/* Fallback icon if the icon name from DB isn't valid in Ionicons, or handle mapping */}
+      <Ionicons name={item.icon as any || 'apps'} size={22} color="#ef4444" />
+      <Text style={styles.serviceText}>{item.name}</Text>
     </TouchableOpacity>
   );
 
@@ -59,14 +81,18 @@ export default function HomeScreen() {
 
         <Text style={styles.title}>¿Qué servicio necesitas hoy?</Text>
 
-        <FlatList
-          data={services}
-          renderItem={renderService}
-          keyExtractor={(item) => item.id}
-          numColumns={2}
-          columnWrapperStyle={styles.row}
-          contentContainerStyle={styles.grid}
-        />
+        {loading ? (
+          <ActivityIndicator size="large" color="#ef4444" />
+        ) : (
+          <FlatList
+            data={services}
+            renderItem={renderService}
+            keyExtractor={(item) => item.id}
+            numColumns={2}
+            columnWrapperStyle={styles.row}
+            contentContainerStyle={styles.grid}
+          />
+        )}
 
         <View style={styles.navBar}>
           {navItems.map(renderNavItem)}

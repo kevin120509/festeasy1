@@ -1,57 +1,203 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import { supabase } from '../../lib/supabase';
+
+interface RequestDetail {
+  id: string;
+  title: string;
+  description: string;
+  event_date: string;
+  event_time: string;
+  location: string;
+  guest_count: number;
+  service_categories: {
+    name: string;
+  };
+}
+
+interface Quote {
+  id: string;
+  proposed_price: number;
+  notes: string;
+  status: string;
+  profiles: {
+    full_name: string;
+    business_name: string;
+    avatar_url: string;
+  };
+}
 
 export default function RequestDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { id } = params;
 
-  // Mock data for demonstration
-  const mockRequests = {
-    '1': {
-      categoria: 'Catering',
-      descripcion: 'Necesito un servicio de catering para una fiesta de cumpleaños con temática de los 80. Preferiblemente comida mexicana.',
-      fecha: '25 de Octubre, 2024 - 7:00 PM',
-      ubicacion: 'Av. Siempreviva 742, Springfield',
-      invitados: '50 personas',
-    },
-    '2': {
-      categoria: 'Música',
-      descripcion: 'Busco banda de rock para evento corporativo, necesito un DJ y un grupo en vivo que toque covers de los 90s.',
-      fecha: '15 de Noviembre, 2024 - 8:00 PM',
-      ubicacion: 'Hotel Plaza, Centro',
-      invitados: '200 personas',
-    },
-    // Add more mock data as needed
+  const [request, setRequest] = useState<RequestDetail | null>(null);
+  const [quotes, setQuotes] = useState<Quote[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  // Provider specific state
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [quotePrice, setQuotePrice] = useState('');
+  const [quoteNotes, setQuoteNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [hasQuoted, setHasQuoted] = useState(false);
+
+  useEffect(() => {
+    if (id) {
+      fetchRequestDetails();
+    }
+  }, [id]);
+
+  const fetchRequestDetails = async () => {
+    try {
+      setLoading(true);
+
+      // 0. Get User and Role
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+          setLoading(false);
+          return; 
+      }
+      setUserId(user.id);
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+      
+      const role = profile?.role || 'client';
+      setUserRole(role);
+
+      // 1. Fetch request details
+      const { data: requestData, error: requestError } = await supabase
+        .from('requests')
+        .select(`
+          id,
+          title,
+          description,
+          event_date,
+          event_time,
+          location,
+          guest_count,
+          service_categories (
+            name
+          )
+        `)
+        .eq('id', id)
+        .single();
+
+      if (requestError) throw requestError;
+
+      setRequest(requestData as any);
+
+      // 2. Logic based on Role
+      if (role === 'provider') {
+          // Check if I have quoted
+          const { data: myQuote } = await supabase
+            .from('quotes')
+            .select('id')
+            .eq('request_id', id)
+            .eq('provider_id', user.id)
+            .maybeSingle();
+          
+          if (myQuote) {
+              setHasQuoted(true);
+          }
+      } else {
+          // Client: Fetch all quotes
+          const { data: quotesData, error: quotesError } = await supabase
+            .from('quotes')
+            .select(`
+              id,
+              proposed_price,
+              notes,
+              status,
+              profiles (
+                full_name,
+                business_name,
+                avatar_url
+              )
+            `)
+            .eq('request_id', id);
+
+          if (quotesError) throw quotesError;
+
+          setQuotes(quotesData as any || []);
+      }
+
+    } catch (error: any) {
+      console.error('Error fetching details:', error);
+      Alert.alert('Error', 'No se pudieron cargar los detalles de la solicitud.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const requestData = mockRequests[id as string] || {
-    categoria: 'Desconocida',
-    descripcion: 'No se encontró la descripción de la solicitud.',
-    fecha: 'Fecha no disponible',
-    ubicacion: 'Ubicación no disponible',
-    invitados: 'Número de invitados no disponible',
+  const handleSendQuote = async () => {
+      if (!quotePrice || !quoteNotes) {
+          Alert.alert('Error', 'Por favor ingresa el precio y una descripción de tu propuesta.');
+          return;
+      }
+
+      setSubmitting(true);
+
+      try {
+          const { error } = await supabase.from('quotes').insert({
+              request_id: id,
+              provider_id: userId,
+              proposed_price: parseFloat(quotePrice),
+              notes: quoteNotes,
+              status: 'pending'
+          });
+
+          if (error) throw error;
+
+          // Optionally update request status to 'quoted'
+          await supabase
+            .from('requests')
+            .update({ status: 'quoted' })
+            .eq('id', id)
+            .eq('status', 'open'); // Only update if currently open
+
+          Alert.alert('Éxito', 'Cotización enviada correctamente', [
+              { text: 'OK', onPress: () => router.back() }
+          ]);
+      } catch (error: any) {
+          console.error('Error sending quote:', error);
+          Alert.alert('Error', 'No se pudo enviar la cotización.');
+      } finally {
+          setSubmitting(false);
+      }
   };
 
-  const proposals = [
-    {
-      id: 1,
-      name: 'Banquetes La Fiesta',
-      rating: 4.8,
-      reviews: 120,
-      price: '$2,500.00',
-    },
-    {
-      id: 2,
-      name: 'TacoMania Eventos',
-      rating: 4.2,
-      reviews: 85,
-      price: '$2,200.00',
-    },
-  ];
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="large" color="#EF4444" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!request) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+          <Text>No se encontró la solicitud.</Text>
+          <TouchableOpacity onPress={() => router.back()} style={{marginTop: 20}}>
+             <Text style={{color: '#EF4444'}}>Volver</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -67,8 +213,9 @@ export default function RequestDetailScreen() {
         <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
           {/* Request Info Card */}
           <View style={styles.card}>
-            <Text style={styles.categoryTitle}>Categoría: {requestData.categoria}</Text>
-            <Text style={styles.descriptionText}>{requestData.descripcion}</Text>
+            <Text style={styles.categoryTitle}>Categoría: {request.service_categories?.name}</Text>
+            <Text style={styles.descriptionTitle}>Descripción:</Text>
+            <Text style={styles.descriptionText}>{request.description}</Text>
 
             <View style={styles.divider} />
 
@@ -76,7 +223,7 @@ export default function RequestDetailScreen() {
               <Ionicons name="calendar-outline" size={20} color="#EF4444" style={styles.icon} />
               <View>
                 <Text style={styles.infoLabel}>Fecha y Hora</Text>
-                <Text style={styles.infoValue}>{requestData.fecha}</Text>
+                <Text style={styles.infoValue}>{request.event_date} - {request.event_time}</Text>
               </View>
             </View>
 
@@ -84,7 +231,7 @@ export default function RequestDetailScreen() {
               <Ionicons name="location-outline" size={20} color="#EF4444" style={styles.icon} />
               <View>
                 <Text style={styles.infoLabel}>Ubicación</Text>
-                <Text style={styles.infoValue}>{requestData.ubicacion}</Text>
+                <Text style={styles.infoValue}>{request.location}</Text>
               </View>
             </View>
 
@@ -92,60 +239,113 @@ export default function RequestDetailScreen() {
               <Ionicons name="people-outline" size={20} color="#EF4444" style={styles.icon} />
               <View>
                 <Text style={styles.infoLabel}>Invitados</Text>
-                <Text style={styles.infoValue}>{requestData.invitados}</Text>
+                <Text style={styles.infoValue}>{request.guest_count}</Text>
               </View>
             </View>
           </View>
 
-          {/* Proposals Section */}
-          <Text style={styles.sectionTitle}>Propuestas Recibidas</Text>
+          {/* PROVIDER VIEW: Quote Form */}
+          {userRole === 'provider' && (
+              <View>
+                  <Text style={styles.sectionTitle}>Enviar Cotización</Text>
+                  {hasQuoted ? (
+                      <View style={styles.infoCard}>
+                          <Ionicons name="checkmark-circle" size={40} color="#10b981" style={{marginBottom: 10}} />
+                          <Text style={styles.infoCardText}>Ya has enviado una propuesta para esta solicitud.</Text>
+                          <Text style={styles.infoCardSubText}>Espera la respuesta del cliente.</Text>
+                      </View>
+                  ) : (
+                      <View style={styles.formCard}>
+                          <Text style={styles.label}>Precio Estimado ($)</Text>
+                          <TextInput 
+                              style={styles.input} 
+                              placeholder="0.00" 
+                              keyboardType="numeric"
+                              value={quotePrice}
+                              onChangeText={setQuotePrice}
+                          />
 
-          {proposals.map((proposal) => (
-            <View key={proposal.id} style={styles.proposalCard}>
-              <Text style={styles.providerName}>{proposal.name}</Text>
-              <View style={styles.ratingContainer}>
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <FontAwesome5
-                    key={star}
-                    name={star <= Math.round(proposal.rating) ? "star" : "star"}
-                    solid={star <= Math.round(proposal.rating)}
-                    size={14}
-                    color="#FFD700"
-                    style={{ marginRight: 2 }}
-                  />
-                ))}
-                <Text style={styles.ratingText}>{proposal.rating} ({proposal.reviews} reseñas)</Text>
+                          <Text style={styles.label}>Notas / Detalles de la Propuesta</Text>
+                          <TextInput 
+                              style={[styles.input, styles.textArea]} 
+                              placeholder="Describe qué incluye tu servicio..." 
+                              multiline
+                              numberOfLines={4}
+                              textAlignVertical="top"
+                              value={quoteNotes}
+                              onChangeText={setQuoteNotes}
+                          />
+
+                          <TouchableOpacity 
+                              style={[styles.submitButton, submitting && styles.disabledButton]}
+                              onPress={handleSendQuote}
+                              disabled={submitting}
+                          >
+                              {submitting ? (
+                                  <ActivityIndicator color="white" />
+                              ) : (
+                                  <Text style={styles.submitButtonText}>Enviar Cotización</Text>
+                              )}
+                          </TouchableOpacity>
+                      </View>
+                  )}
               </View>
+          )}
 
-              <Text style={styles.proposalPrice}>Propuesta: <Text style={styles.priceValue}>{proposal.price}</Text></Text>
+          {/* CLIENT VIEW: Proposals List */}
+          {userRole === 'client' && (
+            <>
+                <Text style={styles.sectionTitle}>Cotizaciones Recibidas ({quotes.length})</Text>
 
-              <View style={styles.proposalActions}>
-                <TouchableOpacity
-                  style={styles.outlineButton}
-                  onPress={() => router.push(`/proposal-detail/${proposal.id}`)}
-                >
-                  <Text style={styles.outlineButtonText}>Ver propuesta</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.filledButton}
-                  onPress={() => router.push('/confirm-payment')}
-                >
-                  <Text style={styles.filledButtonText}>Elegir proveedor</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))}
+                {quotes.length === 0 ? (
+                    <View style={styles.emptyQuotes}>
+                    <Text style={styles.emptyQuotesText}>Aún no has recibido cotizaciones para esta solicitud.</Text>
+                    </View>
+                ) : (
+                    quotes.map((quote) => (
+                    <View key={quote.id} style={styles.proposalCard}>
+                        <Text style={styles.providerName}>
+                        {quote.profiles?.business_name || quote.profiles?.full_name || 'Proveedor'}
+                        </Text>
+                        
+                        <Text style={styles.quoteNotes}>{quote.notes}</Text>
+
+                        <Text style={styles.proposalPrice}>
+                        Cotización: <Text style={styles.priceValue}>${quote.proposed_price}</Text>
+                        </Text>
+
+                        <View style={styles.proposalActions}>
+                        <TouchableOpacity
+                            style={styles.outlineButton}
+                            onPress={() => router.push(`/proposal-detail/${quote.id}`)}
+                        >
+                            <Text style={styles.outlineButtonText}>Ver detalles</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.filledButton}
+                            onPress={() => router.push({ pathname: '/confirm-payment', params: { quoteId: quote.id } })}
+                        >
+                            <Text style={styles.filledButtonText}>Aceptar</Text>
+                        </TouchableOpacity>
+                        </View>
+                    </View>
+                    ))
+                )}
+            </>
+          )}
         </ScrollView>
 
-        {/* Footer Actions */}
-        <View style={styles.footer}>
-          <TouchableOpacity style={styles.footerButtonOutline}>
-            <Text style={styles.footerButtonOutlineText}>Editar solicitud</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.footerButtonOutline, styles.cancelButton]}>
-            <Text style={styles.cancelButtonText}>Cancelar solicitud</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Footer Actions (Only for Client) */}
+        {userRole === 'client' && (
+            <View style={styles.footer}>
+            <TouchableOpacity style={styles.footerButtonOutline}>
+                <Text style={styles.footerButtonOutlineText}>Editar solicitud</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.footerButtonOutline, styles.cancelButton]}>
+                <Text style={styles.cancelButtonText}>Cancelar solicitud</Text>
+            </TouchableOpacity>
+            </View>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -201,9 +401,15 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     color: '#000',
   },
+  descriptionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
   descriptionText: {
     fontSize: 14,
-    color: '#7F1D1D', // Dark reddish brown
+    color: '#4B5563', // Gray 600
     lineHeight: 20,
     marginBottom: 15,
   },
@@ -253,16 +459,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 5,
+    color: '#1F2937',
   },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  quoteNotes: {
+    fontSize: 13,
+    color: '#6B7280',
     marginBottom: 10,
-  },
-  ratingText: {
-    fontSize: 12,
-    color: '#666',
-    marginLeft: 5,
+    fontStyle: 'italic',
   },
   proposalPrice: {
     fontSize: 14,
@@ -272,6 +475,7 @@ const styles = StyleSheet.create({
   priceValue: {
     color: '#EF4444', // Red
     fontWeight: 'bold',
+    fontSize: 16,
   },
   proposalActions: {
     flexDirection: 'row',
@@ -337,4 +541,78 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+  emptyQuotes: {
+    padding: 20,
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 10,
+  },
+  emptyQuotesText: {
+    color: 'gray',
+    textAlign: 'center',
+  },
+  // Form Styles
+  formCard: {
+      backgroundColor: '#fff',
+      borderRadius: 16,
+      padding: 20,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 5,
+      elevation: 2,
+  },
+  label: {
+      fontSize: 14,
+      fontWeight: 'bold',
+      color: '#374151',
+      marginBottom: 8,
+  },
+  input: {
+      backgroundColor: '#f9fafb',
+      borderWidth: 1,
+      borderColor: '#e5e7eb',
+      borderRadius: 10,
+      padding: 12,
+      fontSize: 16,
+      marginBottom: 20,
+  },
+  textArea: {
+      height: 100,
+      textAlignVertical: 'top',
+  },
+  submitButton: {
+      backgroundColor: '#ef4444',
+      paddingVertical: 15,
+      borderRadius: 10,
+      alignItems: 'center',
+  },
+  disabledButton: {
+      backgroundColor: '#fca5a5',
+  },
+  submitButtonText: {
+      color: 'white',
+      fontSize: 16,
+      fontWeight: 'bold',
+  },
+  infoCard: {
+      alignItems: 'center',
+      padding: 30,
+      backgroundColor: '#f0fdf4',
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: '#bbf7d0',
+  },
+  infoCardText: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: '#166534',
+      textAlign: 'center',
+  },
+  infoCardSubText: {
+      fontSize: 14,
+      color: '#166534',
+      marginTop: 5,
+      textAlign: 'center',
+  }
 });

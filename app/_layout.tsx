@@ -9,6 +9,8 @@ export default function RootLayout() {
       <Stack.Screen name="register" options={{ headerShown: false }} />
       <Stack.Screen name="party-type" options={{ headerShown: false }} />
       <Stack.Screen name="home" options={{ headerShown: false }} />
+      <Stack.Screen name="provider-home" options={{ headerShown: false }} />
+      <Stack.Screen name="provider-profile" options={{ headerShown: false }} />
       <Stack.Screen name="service-request" options={{ headerShown: false }} />
       <Stack.Screen name="my-requests" options={{ headerShown: false }} />
       <Stack.Screen name="recent-requests" options={{ headerShown: false }} />

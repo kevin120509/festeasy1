@@ -9,30 +9,92 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import { supabase } from '../lib/supabase';
 
 export default function RegisterScreen() {
   const router = useRouter();
   const [passwordVisible, setPasswordVisible] = useState(false);
 
-  // State for form inputs can be added here
+  // State for form inputs
   const [fullName, setFullName] = useState('');
+  const [businessName, setBusinessName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [role, setRole] = useState<'client' | 'provider'>('client');
+  const [loading, setLoading] = useState(false);
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     // Basic validation
     if (!fullName || !email || !phone || !password) {
-      Alert.alert('Error', 'Por favor, completa todos los campos.');
+      Alert.alert('Error', 'Por favor, completa todos los campos obligatorios.');
       return;
     }
-    // Handle registration logic here
-    Alert.alert('Éxito', 'Cuenta creada correctamente.');
-    router.push('/login');
+
+    if (role === 'provider' && !businessName) {
+      Alert.alert('Error', 'Por favor, ingresa el nombre de tu negocio.');
+      return;
+    }
+
+    setLoading(true);
+
+    // 1. Sign up the user
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: fullName,
+          phone: phone,
+          role: role,
+          business_name: role === 'provider' ? businessName : null,
+        },
+      },
+    });
+
+    if (error) {
+      setLoading(false);
+      Alert.alert('Error al registrarse', error.message);
+      return;
+    }
+
+    if (data.user) {
+      // 2. Insert/Upsert into public.profiles
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: data.user.id,
+          email: email,
+          full_name: fullName,
+          role: role,
+          phone: phone,
+          business_name: role === 'provider' ? businessName : null,
+          updated_at: new Date(),
+        });
+
+      setLoading(false);
+
+      if (profileError) {
+        console.error('Error creating profile:', profileError);
+        Alert.alert('Advertencia', 'Usuario creado, pero hubo un problema al guardar el perfil. Por favor contacta soporte.');
+        return;
+      }
+
+      Alert.alert(
+        'Éxito',
+        'Cuenta creada correctamente. Por favor, verifica tu correo electrónico si es necesario.',
+        [
+          { text: 'OK', onPress: () => router.push('/login') }
+        ]
+      );
+    } else {
+      setLoading(false);
+    }
   };
 
   return (
@@ -46,6 +108,43 @@ export default function RegisterScreen() {
             <Text style={styles.headerSubtitle}>
               Organiza tus eventos de forma fácil y rápida.
             </Text>
+
+            {/* Role Selection */}
+            <View style={styles.roleContainer}>
+              <Text style={styles.label}>Soy un:</Text>
+              <View style={styles.roleButtons}>
+                <TouchableOpacity
+                  style={[styles.roleButton, role === 'client' && styles.roleButtonActive]}
+                  onPress={() => setRole('client')}
+                >
+                  <FontAwesome5 name="user" size={20} color={role === 'client' ? 'white' : 'gray'} />
+                  <Text style={[styles.roleButtonText, role === 'client' && styles.roleButtonTextActive]}>Cliente</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.roleButton, role === 'provider' && styles.roleButtonActive]}
+                  onPress={() => setRole('provider')}
+                >
+                  <FontAwesome5 name="store" size={18} color={role === 'provider' ? 'white' : 'gray'} />
+                  <Text style={[styles.roleButtonText, role === 'provider' && styles.roleButtonTextActive]}>Proveedor</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Business Name Input (Provider Only) */}
+            {role === 'provider' && (
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>Nombre del Negocio</Text>
+                <View style={styles.inputWrapper}>
+                  <FontAwesome5 name="building" size={18} color="gray" style={styles.icon} />
+                  <TextInput
+                    placeholder="Ej. Eventos Mágicos"
+                    style={styles.input}
+                    value={businessName}
+                    onChangeText={setBusinessName}
+                  />
+                </View>
+              </View>
+            )}
 
             {/* Full Name Input */}
             <View style={styles.inputContainer}>
@@ -116,8 +215,16 @@ export default function RegisterScreen() {
             </View>
 
             {/* Register Button */}
-            <TouchableOpacity style={styles.registerButton} onPress={handleRegister}>
-              <Text style={styles.registerButtonText}>Registrar</Text>
+            <TouchableOpacity 
+                style={[styles.registerButton, loading && styles.registerButtonDisabled]} 
+                onPress={handleRegister}
+                disabled={loading}
+            >
+              {loading ? (
+                  <ActivityIndicator color="white" />
+              ) : (
+                  <Text style={styles.registerButtonText}>Registrar</Text>
+              )}
             </TouchableOpacity>
 
             {/* Footer Navigation */}
@@ -175,6 +282,37 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 30,
   },
+  roleContainer: {
+    marginBottom: 20,
+  },
+  roleButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  roleButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 10,
+    marginHorizontal: 5,
+    borderWidth: 1,
+    borderColor: '#eee',
+  },
+  roleButtonActive: {
+    backgroundColor: '#ef4444',
+    borderColor: '#ef4444',
+  },
+  roleButtonText: {
+    marginLeft: 8,
+    fontWeight: 'bold',
+    color: 'gray',
+  },
+  roleButtonTextActive: {
+    color: 'white',
+  },
   inputContainer: {
     marginBottom: 20,
   },
@@ -193,6 +331,8 @@ const styles = StyleSheet.create({
   },
   icon: {
     marginRight: 10,
+    width: 20, // Fixed width for alignment
+    textAlign: 'center',
   },
   eyeIcon: {
     marginLeft: 10,
@@ -210,6 +350,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 10,
     marginBottom: 20,
+  },
+  registerButtonDisabled: {
+    backgroundColor: '#ff9999',
   },
   registerButtonText: {
     color: 'white',

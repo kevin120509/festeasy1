@@ -5,17 +5,69 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useState } from 'react';
+import { supabase } from '../lib/supabase';
 
 export default function ServiceRequestScreen() {
   const router = useRouter();
+  const { categoryId, categoryName } = useLocalSearchParams();
 
-  const handleSubmit = () => {
-    // Logic to handle form submission would go here
-    router.push('/my-requests');
+  const [description, setDescription] = useState('');
+  const [eventDate, setEventDate] = useState('');
+  const [eventTime, setEventTime] = useState('');
+  const [location, setLocation] = useState('');
+  const [guestCount, setGuestCount] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!description || !eventDate || !eventTime || !location || !guestCount) {
+      Alert.alert('Error', 'Por favor completa todos los campos.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        Alert.alert('Error', 'Usuario no autenticado.');
+        setLoading(false);
+        return;
+      }
+
+      const { error } = await supabase.from('requests').insert({
+        client_id: user.id,
+        category_id: categoryId, // Assuming categoryId is passed correctly
+        title: `Solicitud de ${categoryName || 'Servicio'}`, // Default title
+        description: description,
+        event_date: eventDate, // Ensure this format matches DB (YYYY-MM-DD) or let Supabase handle flexible date strings if configured
+        event_time: eventTime,
+        location: location,
+        address: location, // Using location as address for now
+        guest_count: parseInt(guestCount),
+        status: 'open'
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      Alert.alert('Éxito', 'Solicitud enviada correctamente', [
+        { text: 'OK', onPress: () => router.push('/my-requests') }
+      ]);
+
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Hubo un problema al enviar la solicitud.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -27,34 +79,46 @@ export default function ServiceRequestScreen() {
           </TouchableOpacity>
         </View>
         <ScrollView showsVerticalScrollIndicator={false}>
-            <Text style={styles.title}>Describe lo que necesitas</Text>
+            <Text style={styles.title}>Describe lo que necesitas para {categoryName}</Text>
 
             {/* Description Input */}
             <View style={styles.inputGroup}>
                 <Text style={styles.label}>Descripción del evento</Text>
                 <TextInput
                     style={[styles.input, styles.multilineInput]}
-                    placeholder="Ej: Necesito decoración con globos y temática de superhéroes para un cumpleaños infantil. El lugar es un salón de 50m²..."
+                    placeholder="Ej: Necesito decoración con globos y temática de superhéroes..."
                     multiline
                     numberOfLines={4}
                     textAlignVertical="top"
+                    value={description}
+                    onChangeText={setDescription}
                 />
             </View>
 
             {/* Date and Time Row */}
             <View style={styles.row}>
                 <View style={[styles.inputGroup, styles.halfInput]}>
-                    <Text style={styles.label}>Fecha del evento</Text>
+                    <Text style={styles.label}>Fecha (AAAA-MM-DD)</Text>
                     <View style={styles.inputContainer}>
                         <Ionicons name="calendar-outline" size={20} color="gray" style={styles.icon} />
-                        <TextInput style={styles.input} placeholder="DD/MM/AAAA" />
+                        <TextInput 
+                          style={styles.input} 
+                          placeholder="2024-12-31" 
+                          value={eventDate}
+                          onChangeText={setEventDate}
+                        />
                     </View>
                 </View>
                 <View style={[styles.inputGroup, styles.halfInput]}>
-                    <Text style={styles.label}>Hora de Inicio</Text>
+                    <Text style={styles.label}>Hora (HH:MM)</Text>
                     <View style={styles.inputContainer}>
                         <Ionicons name="time-outline" size={20} color="gray" style={styles.icon} />
-                        <TextInput style={styles.input} placeholder="HH:MM" />
+                        <TextInput 
+                          style={styles.input} 
+                          placeholder="14:00" 
+                          value={eventTime}
+                          onChangeText={setEventTime}
+                        />
                     </View>
                 </View>
             </View>
@@ -63,7 +127,12 @@ export default function ServiceRequestScreen() {
             <View style={styles.inputGroup}>
                 <Text style={styles.label}>Ubicación o dirección</Text>
                 <View style={styles.inputContainer}>
-                    <TextInput style={styles.input} placeholder="Calle Falsa 123, Ciudad" />
+                    <TextInput 
+                      style={styles.input} 
+                      placeholder="Calle Falsa 123, Ciudad" 
+                      value={location}
+                      onChangeText={setLocation}
+                    />
                     <Ionicons name="location-outline" size={22} color="gray" style={styles.iconRight} />
                 </View>
             </View>
@@ -75,12 +144,22 @@ export default function ServiceRequestScreen() {
                     style={styles.input}
                     placeholder="Ej: 50"
                     keyboardType="numeric"
+                    value={guestCount}
+                    onChangeText={setGuestCount}
                 />
             </View>
             
             {/* Submit Button */}
-            <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-                <Text style={styles.submitButtonText}>Enviar solicitud</Text>
+            <TouchableOpacity 
+              style={[styles.submitButton, loading && styles.submitButtonDisabled]} 
+              onPress={handleSubmit}
+              disabled={loading}
+            >
+                {loading ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Enviar solicitud</Text>
+                )}
             </TouchableOpacity>
         </ScrollView>
       </View>
@@ -125,6 +204,7 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     borderWidth: 0,
+    flex: 1,
   },
   multilineInput: {
     height: 100,
@@ -156,6 +236,9 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     alignItems: 'center',
     marginTop: 10,
+  },
+  submitButtonDisabled: {
+    backgroundColor: '#ff9999',
   },
   submitButtonText: {
     color: 'white',
