@@ -13,6 +13,7 @@ interface RequestDetail {
   event_time: string;
   location: string;
   guest_count: number;
+  category_id: string; // Added for editing
   service_categories: {
     name: string;
   };
@@ -38,6 +39,7 @@ export default function RequestDetailScreen() {
   const [request, setRequest] = useState<RequestDetail | null>(null);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isCancelling, setIsCancelling] = useState(false);
   
   // Provider specific state
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -85,6 +87,7 @@ export default function RequestDetailScreen() {
           event_time,
           location,
           guest_count,
+          category_id,
           service_categories (
             name
           )
@@ -175,6 +178,57 @@ export default function RequestDetailScreen() {
           setSubmitting(false);
       }
   };
+
+  const handleEditRequest = () => {
+    if (!request) return;
+    router.push({
+      pathname: '/service-request',
+      params: {
+        id: request.id,
+        description: request.description,
+        eventDate: request.event_date,
+        eventTime: request.event_time,
+        location: request.location,
+        guestCount: request.guest_count.toString(),
+        categoryId: request.category_id,
+        categoryName: request.service_categories.name,
+      },
+    });
+  };
+
+  const handleCancelRequest = async () => {
+    Alert.alert(
+      'Confirmar Cancelación',
+      '¿Estás seguro de que quieres cancelar esta solicitud? Esta acción no se puede deshacer.',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Sí, cancelar',
+          style: 'destructive',
+          onPress: async () => {
+            setIsCancelling(true);
+            try {
+              const { error } = await supabase
+                .from('requests')
+                .update({ status: 'cancelled' })
+                .eq('id', id);
+
+              if (error) throw error;
+
+              Alert.alert('Cancelada', 'Tu solicitud ha sido cancelada.', [
+                { text: 'OK', onPress: () => router.replace('/my-requests') },
+              ]);
+            } catch (error: any) {
+              Alert.alert('Error', `No se pudo cancelar la solicitud: ${error.message}`);
+            } finally {
+              setIsCancelling(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
 
   if (loading) {
     return (
@@ -335,14 +389,25 @@ export default function RequestDetailScreen() {
           )}
         </ScrollView>
 
-        {/* Footer Actions (Only for Client) */}
-        {userRole === 'client' && (
+        {/* Footer Actions (Only for Client and if status is not cancelled) */}
+        {userRole === 'client' && request.status !== 'cancelled' && (
             <View style={styles.footer}>
-            <TouchableOpacity style={styles.footerButtonOutline}>
+            <TouchableOpacity 
+              style={styles.footerButtonOutline}
+              onPress={handleEditRequest}
+            >
                 <Text style={styles.footerButtonOutlineText}>Editar solicitud</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.footerButtonOutline, styles.cancelButton]}>
+            <TouchableOpacity 
+              style={[styles.footerButtonOutline, styles.cancelButton, isCancelling && {opacity: 0.7}]}
+              onPress={handleCancelRequest}
+              disabled={isCancelling}
+            >
+              {isCancelling ? (
+                <ActivityIndicator color="gray" />
+              ) : (
                 <Text style={styles.cancelButtonText}>Cancelar solicitud</Text>
+              )}
             </TouchableOpacity>
             </View>
         )}
