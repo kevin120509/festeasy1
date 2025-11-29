@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 
-export default function ProviderProfileScreen() {
+export default function ClientProfileScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [profile, setProfile] = useState<any>(null);
@@ -24,7 +24,6 @@ export default function ProviderProfileScreen() {
         return;
       }
 
-      // Fetch Profile
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -36,7 +35,7 @@ export default function ProviderProfileScreen() {
 
     } catch (error: any) {
       console.error('Error fetching data:', error);
-      Alert.alert('Error', 'No se pudo cargar la información.');
+      Alert.alert('Error', 'No se pudo cargar la información del perfil.');
     } finally {
       setLoading(false);
     }
@@ -64,13 +63,31 @@ export default function ProviderProfileScreen() {
     );
   }
 
+  const renderNavItem = (item: { name: string; icon: any; active: boolean; route: string }) => (
+    <TouchableOpacity key={item.name} style={styles.navItem} onPress={() => item.route && router.push(item.route)}>
+      <Ionicons
+        name={item.icon}
+        size={26}
+        color={item.active ? '#ef4444' : 'gray'}
+      />
+      <Text style={[styles.navText, item.active && styles.navTextActive]}>
+        {item.name}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  const navItems = [
+    { name: 'Inicio', icon: 'home', active: false, route: '/home' },
+    { name: 'Mis Solicitudes', icon: 'calendar', active: false, route: '/my-requests' },
+    { name: 'Chats', icon: 'chatbubble-ellipses', active: false, route: '/chats' },
+    { name: 'Perfil', icon: 'person', active: true, route: '/client-profile' },
+  ];
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="black" />
-          </TouchableOpacity>
+           {/* Header without back button for main tab screen */}
           <Text style={styles.headerTitle}>Mi Perfil</Text>
         </View>
 
@@ -81,7 +98,6 @@ export default function ProviderProfileScreen() {
                 <FontAwesome name="user-circle" size={80} color="#ccc" />
               </View>
               <Text style={styles.profileName}>{profile.full_name}</Text>
-              {profile.business_name && <Text style={styles.profileBusiness}>{profile.business_name}</Text>}
               <Text style={styles.profileEmail}>{profile.email}</Text>
               {profile.phone && <Text style={styles.profilePhone}>{profile.phone}</Text>}
             </View>
@@ -103,6 +119,10 @@ export default function ProviderProfileScreen() {
             )}
           </TouchableOpacity>
         </ScrollView>
+
+        <View style={styles.navBar}>
+          {navItems.map(renderNavItem)}
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -120,14 +140,12 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center', // Center title since no back button
     paddingVertical: 15,
     paddingHorizontal: 20,
     backgroundColor: '#F9FAFB',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
-  },
-  backButton: {
-    marginRight: 15,
   },
   headerTitle: {
     fontSize: 18,
@@ -136,7 +154,8 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 50,
+    paddingBottom: 100, // Extra padding for nav bar
+    alignItems: 'center',
   },
   profileCard: {
     backgroundColor: '#fff',
@@ -160,11 +179,6 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 5,
   },
-  profileBusiness: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 5,
-  },
   profileEmail: {
     fontSize: 14,
     color: 'gray',
@@ -183,7 +197,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   logoutButton: {
-    backgroundColor: '#DC2626',
+    backgroundColor: '#DC2626', // Red color
     paddingVertical: 15,
     borderRadius: 10,
     width: '100%',
@@ -196,6 +210,34 @@ const styles = StyleSheet.create({
   logoutButtonText: {
     color: 'white',
     fontSize: 16,
+    fontWeight: 'bold',
+  },
+  navBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    paddingBottom: 15,
+  },
+  navItem: {
+    alignItems: 'center',
+  },
+  navText: {
+    fontSize: 12,
+    color: 'gray',
+    marginTop: 2,
+  },
+  navTextActive: {
+    color: '#ef4444',
     fontWeight: 'bold',
   },
 });

@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Ionicons, FontAwesome } from '@expo/vector-icons';
+import { Ionicons, FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 
 // Interfaces
@@ -121,26 +121,82 @@ export default function ProviderRequestsScreen() {
     fetchQuotedRequests().then(() => setRefreshing(false));
   }, [fetchQuotedRequests]);
 
-  const renderQuotedRequest = ({ item }: { item: QuotedRequest }) => (
-    <TouchableOpacity 
-      style={styles.quotedCard}
-      onPress={() => router.push(`/proposal-detail/${item.quote_id}`)}
-    >
-      <View style={styles.quotedRow}>
-        <View style={styles.quotedInfo}>
-            <Text style={styles.quotedTitle}>{item.title}</Text>
-            <Text style={styles.quotedSubtitle}>
-                Cotizado: <Text style={{fontWeight: 'bold'}}>${item.quote_price}</Text>
-            </Text>
+  const getCategoryIcon = (categoryName: string) => {
+    if (!categoryName) return { Lib: Ionicons, name: 'apps-outline' };
+    
+    // Normalize: lowercase and remove accents
+    const normalized = categoryName
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    
+    if (normalized.includes('floreria') || normalized.includes('floristería')) {
+      return { Lib: Ionicons, name: 'flower' };
+    }
+    if (normalized.includes('pasteleria') || normalized.includes('postres') || normalized.includes('pastel')) {
+      return { Lib: MaterialCommunityIcons, name: 'cupcake' };
+    }
+    if (normalized.includes('iluminacion') || normalized.includes('luces')) {
+      return { Lib: MaterialCommunityIcons, name: 'lightbulb-on' };
+    }
+    if (normalized.includes('decoracion') || normalized.includes('globos')) {
+      return { Lib: MaterialCommunityIcons, name: 'balloon' };
+    }
+    if (normalized.includes('catering') || normalized.includes('comida') || normalized.includes('alimentos')) {
+      return { Lib: MaterialCommunityIcons, name: 'silverware-fork-knife' };
+    }
+    if (normalized.includes('musica') || normalized.includes('dj') || normalized.includes('sonido')) {
+      return { Lib: Ionicons, name: 'musical-notes' };
+    }
+    if (normalized.includes('foto') || normalized.includes('video')) {
+      return { Lib: Ionicons, name: 'camera' };
+    }
+    if (normalized.includes('mobiliario') || normalized.includes('sillas') || normalized.includes('mesas')) {
+      return { Lib: MaterialCommunityIcons, name: 'table-chair' };
+    }
+    if (normalized.includes('montaje') || normalized.includes('carpas')) {
+      return { Lib: MaterialCommunityIcons, name: 'hammer-wrench' };
+    }
+    if (normalized.includes('animacion') || normalized.includes('entretenimiento')) {
+      return { Lib: FontAwesome, name: 'magic' };
+    }
+    if (normalized.includes('bebidas') || normalized.includes('barra')) {
+      return { Lib: MaterialCommunityIcons, name: 'glass-cocktail' };
+    }
+    
+    // Default
+    return { Lib: Ionicons, name: 'apps-outline' };
+  };
+
+  const renderQuotedRequest = ({ item }: { item: QuotedRequest }) => {
+    const { Lib, name } = getCategoryIcon(item.service_categories?.name || '');
+    const displayName = item.service_categories?.name?.toLowerCase() === 'floristeria' ? 'Floreria' : item.service_categories?.name;
+    
+    return (
+      <TouchableOpacity 
+        style={styles.quotedCard}
+        onPress={() => router.push(`/proposal-detail/${item.quote_id}`)}
+      >
+        <View style={styles.quotedRow}>
+          <View style={styles.quotedInfo}>
+              <Text style={styles.quotedTitle}>{item.title}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                <Lib name={name as any} size={14} color="#6b7280" style={{ marginRight: 4 }} />
+                <Text style={{ fontSize: 12, color: '#6b7280' }}>{displayName}</Text>
+              </View>
+              <Text style={styles.quotedSubtitle}>
+                  Cotizado: <Text style={{fontWeight: 'bold'}}>${item.quote_price}</Text>
+              </Text>
+          </View>
+          <View style={[styles.statusBadge, item.quote_status === 'accepted' ? styles.statusAccepted : styles.statusPending]}>
+              <Text style={[styles.statusText, item.quote_status === 'accepted' ? styles.statusTextAccepted : styles.statusTextPending]}>
+                  {item.quote_status === 'accepted' ? 'Aceptada' : 'Pendiente'}
+              </Text>
+          </View>
         </View>
-        <View style={[styles.statusBadge, item.quote_status === 'accepted' ? styles.statusAccepted : styles.statusPending]}>
-            <Text style={[styles.statusText, item.quote_status === 'accepted' ? styles.statusTextAccepted : styles.statusTextPending]}>
-                {item.quote_status === 'accepted' ? 'Aceptada' : 'Pendiente'}
-            </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>

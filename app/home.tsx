@@ -15,8 +15,8 @@ import { supabase } from '../lib/supabase';
 const navItems = [
   { name: 'Inicio', icon: 'home', active: true, route: '/home' },
   { name: 'Mis Solicitudes', icon: 'calendar', active: false, route: '/my-requests' },
-  { name: 'Chats', icon: 'chatbubble-ellipses', active: false, route: '/chats' }, // Assuming a future /chats route
-  { name: 'Perfil', icon: 'person', active: false, route: '/profile' }, // Assuming a future /profile route
+  { name: 'Chats', icon: 'chatbubble-ellipses', active: false, route: '/chats' },
+  { name: 'Perfil', icon: 'person', active: false, route: '/client-profile' },
 ]
 
 export default function HomeScreen() {
@@ -48,15 +48,28 @@ export default function HomeScreen() {
   };
 
   const getCategoryIcon = (categoryName: string) => {
-    const normalized = categoryName.toLowerCase();
+    // Normalize: lowercase and remove accents
+    const normalized = categoryName
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
     
-    if (normalized.includes('decoración') || normalized.includes('globos')) {
+    if (normalized.includes('floreria') || normalized.includes('floristeria')) {
+      return { Lib: Ionicons, name: 'flower' };
+    }
+    if (normalized.includes('pasteleria') || normalized.includes('postres') || normalized.includes('pastel')) {
+      return { Lib: MaterialCommunityIcons, name: 'cupcake' };
+    }
+    if (normalized.includes('iluminacion') || normalized.includes('luces')) {
+      return { Lib: MaterialCommunityIcons, name: 'lightbulb-on' };
+    }
+    if (normalized.includes('decoracion') || normalized.includes('globos')) {
       return { Lib: MaterialCommunityIcons, name: 'balloon' };
     }
     if (normalized.includes('catering') || normalized.includes('comida') || normalized.includes('alimentos')) {
       return { Lib: MaterialCommunityIcons, name: 'silverware-fork-knife' };
     }
-    if (normalized.includes('música') || normalized.includes('dj') || normalized.includes('sonido')) {
+    if (normalized.includes('musica') || normalized.includes('dj') || normalized.includes('sonido')) {
       return { Lib: Ionicons, name: 'musical-notes' };
     }
     if (normalized.includes('foto') || normalized.includes('video')) {
@@ -68,7 +81,7 @@ export default function HomeScreen() {
     if (normalized.includes('montaje') || normalized.includes('carpas')) {
       return { Lib: MaterialCommunityIcons, name: 'hammer-wrench' };
     }
-    if (normalized.includes('animación') || normalized.includes('entretenimiento')) {
+    if (normalized.includes('animacion') || normalized.includes('entretenimiento')) {
       return { Lib: FontAwesome, name: 'magic' };
     }
     if (normalized.includes('bebidas') || normalized.includes('barra')) {
@@ -80,15 +93,16 @@ export default function HomeScreen() {
   };
 
   const renderService = ({ item }: { item: { id: string; name: string; icon: string } }) => {
-    const { Lib, name } = getCategoryIcon(item.name);
+    const { Lib, name: iconName } = getCategoryIcon(item.name);
+    const displayName = item.name.toLowerCase() === 'floristeria' ? 'Floreria' : item.name;
 
     return (
       <TouchableOpacity 
         style={styles.serviceButton} 
-        onPress={() => router.push({ pathname: '/service-request', params: { categoryId: item.id, categoryName: item.name } })}
+        onPress={() => router.push({ pathname: '/service-request', params: { categoryId: item.id, categoryName: displayName } })}
       >
-        <Lib name={name as any} size={24} color="#ef4444" />
-        <Text style={styles.serviceText}>{item.name}</Text>
+        <Lib name={iconName as any} size={24} color="#ef4444" />
+        <Text style={styles.serviceText}>{displayName}</Text>
       </TouchableOpacity>
     );
   };
@@ -111,7 +125,9 @@ export default function HomeScreen() {
       <View style={styles.card}>
         <View style={styles.header}>
           <MaterialCommunityIcons name="party-popper" size={28} color="#374151" />
-          <FontAwesome name="user-circle" size={28} color="#374151" />
+          <TouchableOpacity onPress={() => router.push('/client-profile')}>
+            <FontAwesome name="user-circle" size={28} color="#374151" />
+          </TouchableOpacity>
         </View>
 
         <Text style={styles.title}>¿Qué servicio necesitas hoy?</Text>

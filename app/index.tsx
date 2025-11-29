@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { FontAwesome5, Ionicons } from '@expo/vector-icons';
+import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -10,9 +10,9 @@ export default function WelcomeScreen() {
     <View style={styles.container}>
       <View style={styles.content}>
         <View style={styles.iconCircle}>
-          <FontAwesome5 name="birthday-cake" size={60} color="white" />
+          <MaterialCommunityIcons name="balloon" size={90} color="white" />
         </View>
-        <Text style={styles.mainTitle}>Organiza tu evento en minutos</Text>
+        <Text style={styles.mainTitle}>Tu fiesta facil y a un click de distancia</Text>
       </View>
 
       <View style={styles.buttonContainer}>

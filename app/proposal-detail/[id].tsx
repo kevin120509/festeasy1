@@ -1,59 +1,93 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
-
-const { width } = Dimensions.get('window');
+import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
+import { supabase } from '../../lib/supabase';
 
 export default function ProposalDetailScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams();
-  const { id } = params;
+  const { id } = useLocalSearchParams();
+  const [loading, setLoading] = useState(true);
+  const [quote, setQuote] = useState<any>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
-  // Mock data for proposals (can be expanded to include more details based on 'id')
-  const proposalData = {
-    'catering-delicias-prop-1': {
-      rating: 4.5,
-      reviews: 120,
-      price: '$15,000.00',
-      ratingBreakdown: [
-        { stars: 5, percentage: 70 },
-        { stars: 4, percentage: 20 },
-        { stars: 3, percentage: 5 },
-        { stars: 2, percentage: 3 },
-        { stars: 1, percentage: 2 },
-      ],
-      includes: [
-        'Menú de 3 tiempos para 50 personas (entrada, plato fuerte, postre).',
-        'Bebidas ilimitadas (refrescos, agua, jugos naturales).',
-        'Personal de servicio (meseros, capitán, cocineros).',
-        'Montaje de mesas, sillas y mantelería básica.',
-      ],
-      notes:
-        'Nuestra propuesta de catering está diseñada para ofrecer una experiencia gastronómica inolvidable. Incluye opciones personalizables y se adapta a sus necesidades dietéticas. Válido por 30 días a partir de la fecha de emisión.',
-    },
-    // Add more mock data for other proposals if needed
-  };
+  useEffect(() => {
+    fetchData();
+  }, [id]);
 
-  const currentProposal = proposalData[id as string] || proposalData['catering-delicias-prop-1']; // Default if ID not found
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        router.replace('/login');
+        return;
+      }
 
-  const renderStars = (rating: number) => {
-    const stars = [];
-    for (let i = 1; i <= 5; i++) {
-      stars.push(
-        <FontAwesome5
-          key={i}
-          name={i <= Math.floor(rating) ? 'star' : 'star'}
-          solid={i <= Math.floor(rating)}
-          size={20}
-          color="#FFD700" // Gold color for stars
-          style={{ marginRight: 2 }}
-        />
-      );
+      // Get user role from metadata or profile
+      // For simplicity, let's verify via the quote ownership
+      // But typically we might store role in metadata
+      const role = user.user_metadata?.role || 'client';
+      setUserRole(role);
+
+      // Fetch Quote with Request and Provider Profile
+      const { data, error } = await supabase
+        .from('quotes')
+        .select(`
+          *,
+          requests (
+            title,
+            event_date,
+            location,
+            description,
+            status
+          ),
+          profiles:provider_id (
+            full_name,
+            business_name,
+            phone,
+            email
+          )
+        `)
+        .eq('id', id)
+        .single();
+
+      if (error) throw error;
+      setQuote(data);
+
+    } catch (error: any) {
+      console.error('Error fetching proposal details:', error);
+      Alert.alert('Error', 'No se pudo cargar la información de la propuesta.');
+      router.back();
+    } finally {
+      setLoading(false);
     }
-    return <View style={styles.starsContainer}>{stars}</View>;
   };
+
+  const handleAcceptProposal = async () => {
+    if (!quote) return;
+    Alert.alert('Funcionalidad', 'Aquí iría la lógica para aceptar la propuesta y proceder al pago.');
+    // Logic to update quote status to 'accepted' and request status to 'hired' would go here.
+    // router.push('/confirm-payment');
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="large" color="#ef4444" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!quote) return null;
+
+  const isProvider = userRole === 'provider';
+  const request = quote.requests;
+  const provider = quote.profiles;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -63,71 +97,105 @@ export default function ProposalDetailScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="black" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Propuesta de Catering Delicias</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {isProvider ? 'Detalle de Cotización' : `Propuesta de ${provider?.business_name || provider?.full_name}`}
+          </Text>
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          {/* Rating Section */}
-          <View style={styles.section}>
-            <View style={styles.mainRating}>
-              <Text style={styles.mainRatingNumber}>{currentProposal.rating}</Text>
-              {renderStars(currentProposal.rating)}
-            </View>
-            <Text style={styles.reviewCount}>Basado en {currentProposal.reviews} reseñas</Text>
-
-            <View style={styles.ratingBreakdown}>
-              {currentProposal.ratingBreakdown.map((item) => (
-                <View key={item.stars} style={styles.progressBarContainer}>
-                  <Text style={styles.progressBarText}>{item.stars}</Text>
-                  <View style={styles.progressBarBackground}>
-                    <View
-                      style={[
-                        styles.progressBarFill,
-                        { width: `${item.percentage}%` },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.progressBarText}>{item.percentage}%</Text>
+            
+          {/* Request Details Section */}
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Información de la Solicitud</Text>
+            
+            <View style={styles.infoRow}>
+                <Ionicons name="calendar" size={20} color="#555" style={styles.icon} />
+                <View style={styles.infoContent}>
+                    <Text style={styles.label}>Fecha del Evento</Text>
+                    <Text style={styles.value}>{request?.event_date}</Text>
                 </View>
-              ))}
+            </View>
+
+            <View style={styles.infoRow}>
+                <Ionicons name="location" size={20} color="#555" style={styles.icon} />
+                <View style={styles.infoContent}>
+                    <Text style={styles.label}>Ubicación</Text>
+                    <Text style={styles.value}>{request?.location || 'No especificada'}</Text>
+                </View>
+            </View>
+
+            <View style={styles.infoRow}>
+                <MaterialCommunityIcons name="text-box-outline" size={20} color="#555" style={styles.icon} />
+                <View style={styles.infoContent}>
+                    <Text style={styles.label}>Descripción del Cliente</Text>
+                    <Text style={styles.value}>{request?.description || 'Sin descripción adicional.'}</Text>
+                </View>
             </View>
           </View>
 
-          {/* Price Section */}
-          <View style={styles.section}>
-            <Text style={styles.priceTitle}>Precio final</Text>
-            <Text style={styles.totalPrice}>{currentProposal.price}</Text>
+          {/* Quote Details Section */}
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Detalles de la Cotización</Text>
+
+            <View style={styles.priceContainer}>
+                <Text style={styles.priceLabel}>Precio Cotizado</Text>
+                <Text style={styles.priceValue}>${quote.proposed_price}</Text>
+            </View>
+
+            <View style={styles.infoRow}>
+                <MaterialCommunityIcons name="comment-quote-outline" size={20} color="#555" style={styles.icon} />
+                <View style={styles.infoContent}>
+                    <Text style={styles.label}>Mensaje / Notas</Text>
+                    <Text style={styles.value}>{quote.content || 'Sin notas adicionales.'}</Text>
+                </View>
+            </View>
+            
+            <View style={styles.statusContainer}>
+                 <Text style={styles.statusLabel}>Estado: </Text>
+                 <View style={[
+                     styles.statusBadge, 
+                     quote.status === 'accepted' ? styles.statusAccepted : 
+                     quote.status === 'rejected' ? styles.statusRejected : styles.statusPending
+                 ]}>
+                     <Text style={[
+                         styles.statusText,
+                         quote.status === 'accepted' ? styles.statusTextAccepted : 
+                         quote.status === 'rejected' ? styles.statusTextRejected : styles.statusTextPending
+                     ]}>
+                        {quote.status === 'accepted' ? 'Aceptada' : 
+                         quote.status === 'rejected' ? 'Rechazada' : 'Pendiente'}
+                     </Text>
+                 </View>
+            </View>
           </View>
 
-          {/* What's Included Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Qué incluye</Text>
-            {currentProposal.includes.map((item, index) => (
-              <View key={index} style={styles.includeItem}>
-                <Ionicons name="checkmark-circle" size={20} color="green" style={styles.checkmarkIcon} />
-                <Text style={styles.includeText}>{item}</Text>
-              </View>
-            ))}
-          </View>
+          {/* Provider Info (Only for Client view) */}
+          {!isProvider && (
+            <View style={styles.card}>
+                <Text style={styles.sectionTitle}>Sobre el Proveedor</Text>
+                <Text style={styles.providerName}>{provider?.business_name}</Text>
+                <Text style={styles.providerContact}>{provider?.full_name}</Text>
+                <Text style={styles.providerContact}>{provider?.email}</Text>
+                <Text style={styles.providerContact}>{provider?.phone}</Text>
+            </View>
+          )}
 
-          {/* Provider Notes Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Notas del proveedor</Text>
-            <Text style={styles.notesText}>{currentProposal.notes}</Text>
-          </View>
         </ScrollView>
 
-        {/* Fixed Footer */}
+        {/* Footer Actions */}
         <View style={styles.footer}>
-          <TouchableOpacity
-            style={styles.chooseProviderButton}
-            onPress={() => router.push('/confirm-payment')}
-          >
-            <Text style={styles.chooseProviderButtonText}>Elegir este proveedor</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.backButtonFooter} onPress={() => router.back()}>
-            <Text style={styles.backButtonFooterText}>Volver</Text>
-          </TouchableOpacity>
+          {!isProvider && quote.status === 'pending' ? (
+             <TouchableOpacity
+                style={styles.chooseProviderButton}
+                onPress={handleAcceptProposal}
+              >
+                <Text style={styles.chooseProviderButtonText}>Elegir este proveedor</Text>
+             </TouchableOpacity>
+          ) : (
+             <TouchableOpacity style={styles.backButtonFooter} onPress={() => router.back()}>
+                <Text style={styles.backButtonFooterText}>Volver</Text>
+             </TouchableOpacity>
+          )}
         </View>
       </View>
     </SafeAreaView>
@@ -137,20 +205,19 @@ export default function ProposalDetailScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f9fafb',
   },
   container: {
     flex: 1,
-    backgroundColor: '#fff',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 15,
     paddingHorizontal: 20,
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
-    backgroundColor: '#fff',
   },
   backButton: {
     marginRight: 15,
@@ -158,98 +225,114 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#000',
+    color: '#111827',
+    flex: 1,
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 100, // Space for the fixed footer
+    paddingBottom: 100,
   },
-  section: {
-    marginBottom: 25,
-    paddingBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  mainRating: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  mainRatingNumber: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginRight: 10,
-    color: '#000',
-  },
-  starsContainer: {
-    flexDirection: 'row',
-  },
-  reviewCount: {
-    fontSize: 14,
-    color: 'gray',
-    marginBottom: 15,
-  },
-  ratingBreakdown: {
-    marginTop: 10,
-  },
-  progressBarContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  progressBarText: {
-    width: 25,
-    fontSize: 12,
-    color: 'gray',
-  },
-  progressBarBackground: {
-    flex: 1,
-    height: 8,
-    backgroundColor: '#eee',
-    borderRadius: 4,
-    marginHorizontal: 10,
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: '#fca5a5', // Light red
-    borderRadius: 4,
-  },
-  priceTitle: {
-    fontSize: 16,
-    color: 'gray',
-    marginBottom: 5,
-  },
-  totalPrice: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#000',
+  card: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 15,
-    color: '#000',
+    color: '#111827',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+    paddingBottom: 10,
   },
-  includeItem: {
+  infoRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 10,
+    marginBottom: 15,
   },
-  checkmarkIcon: {
-    marginRight: 10,
+  icon: {
+    marginRight: 12,
     marginTop: 2,
   },
-  includeText: {
+  infoContent: {
     flex: 1,
+  },
+  label: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 2,
+    textTransform: 'uppercase',
+    fontWeight: '600',
+  },
+  value: {
     fontSize: 16,
-    color: '#333',
+    color: '#374151',
     lineHeight: 22,
   },
-  notesText: {
-    fontSize: 14,
-    color: '#555',
-    lineHeight: 20,
+  priceContainer: {
+      alignItems: 'center',
+      marginBottom: 20,
+      backgroundColor: '#fef2f2',
+      padding: 15,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: '#fee2e2',
   },
+  priceLabel: {
+      fontSize: 14,
+      color: '#ef4444',
+      fontWeight: '600',
+      marginBottom: 5,
+  },
+  priceValue: {
+      fontSize: 32,
+      fontWeight: 'bold',
+      color: '#b91c1c',
+  },
+  statusContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 10,
+      justifyContent: 'flex-end',
+  },
+  statusLabel: {
+      fontSize: 14,
+      color: '#6b7280',
+      marginRight: 5,
+  },
+  statusBadge: {
+      paddingHorizontal: 12,
+      paddingVertical: 4,
+      borderRadius: 12,
+  },
+  statusPending: { backgroundColor: '#fff7ed' },
+  statusAccepted: { backgroundColor: '#dcfce7' },
+  statusRejected: { backgroundColor: '#fef2f2' },
+  
+  statusText: { fontSize: 14, fontWeight: 'bold' },
+  statusTextPending: { color: '#c2410c' },
+  statusTextAccepted: { color: '#15803d' },
+  statusTextRejected: { color: '#b91c1c' },
+
+  providerName: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: '#333',
+      marginBottom: 5,
+  },
+  providerContact: {
+      fontSize: 14,
+      color: '#555',
+      marginBottom: 2,
+  },
+
   footer: {
     position: 'absolute',
     bottom: 0,
@@ -257,23 +340,18 @@ const styles = StyleSheet.create({
     right: 0,
     backgroundColor: '#fff',
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 15,
     paddingHorizontal: 20,
     borderTopWidth: 1,
     borderTopColor: '#eee',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 5,
   },
   chooseProviderButton: {
-    backgroundColor: '#ef4444', // Red
-    borderRadius: 25,
-    paddingVertical: 14,
-    width: '60%',
+    backgroundColor: '#ef4444',
+    borderRadius: 10,
+    paddingVertical: 15,
+    width: '100%',
     alignItems: 'center',
   },
   chooseProviderButtonText: {
@@ -282,14 +360,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   backButtonFooter: {
-    borderRadius: 25,
-    paddingVertical: 14,
-    width: '35%',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 10,
+    paddingVertical: 15,
+    width: '100%',
     alignItems: 'center',
-    borderColor: 'transparent',
   },
   backButtonFooterText: {
-    color: 'gray',
+    color: '#374151',
     fontSize: 16,
     fontWeight: 'bold',
   },

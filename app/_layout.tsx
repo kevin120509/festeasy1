@@ -1,7 +1,23 @@
 import { Stack } from 'expo-router';
-import React from 'react';
+import React, { useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 
 export default function RootLayout() {
+  useEffect(() => {
+    const checkSession = async () => {
+      const { error } = await supabase.auth.getSession();
+      if (error) {
+        console.error('Session error:', error.message);
+        // If the refresh token is invalid, sign out to clear the bad state
+        if (error.message.includes('Refresh Token') || error.message.includes('Invalid Refresh Token')) {
+          await supabase.auth.signOut();
+        }
+      }
+    };
+
+    checkSession();
+  }, []);
+
   return (
     <Stack>
       <Stack.Screen name="index" options={{ headerShown: false }} />
@@ -11,6 +27,7 @@ export default function RootLayout() {
       <Stack.Screen name="home" options={{ headerShown: false }} />
       <Stack.Screen name="provider-home" options={{ headerShown: false }} />
       <Stack.Screen name="provider-profile" options={{ headerShown: false }} />
+      <Stack.Screen name="client-profile" options={{ headerShown: false }} />
       <Stack.Screen name="service-request" options={{ headerShown: false }} />
       <Stack.Screen name="my-requests" options={{ headerShown: false }} />
       <Stack.Screen name="recent-requests" options={{ headerShown: false }} />

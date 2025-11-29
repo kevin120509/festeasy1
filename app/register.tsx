@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -28,6 +28,25 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'client' | 'provider'>('client');
   const [loading, setLoading] = useState(false);
+  
+  // Categories state
+  const [categories, setCategories] = useState<{ id: string; name: string; icon: string }[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  const fetchCategories = async () => {
+    const { data, error } = await supabase
+      .from('service_categories')
+      .select('id, name, icon')
+      .eq('active', true);
+    
+    if (!error && data) {
+      setCategories(data);
+    }
+  };
 
   const handleRegister = async () => {
     // Basic validation
@@ -36,9 +55,15 @@ export default function RegisterScreen() {
       return;
     }
 
-    if (role === 'provider' && !businessName) {
-      Alert.alert('Error', 'Por favor, ingresa el nombre de tu negocio.');
-      return;
+    if (role === 'provider') {
+        if (!businessName) {
+            Alert.alert('Error', 'Por favor, ingresa el nombre de tu negocio.');
+            return;
+        }
+        if (!selectedCategory) {
+            Alert.alert('Error', 'Por favor, selecciona la categoría principal de tu servicio.');
+            return;
+        }
     }
 
     setLoading(true);
@@ -77,13 +102,35 @@ export default function RegisterScreen() {
           updated_at: new Date(),
         });
 
-      setLoading(false);
-
       if (profileError) {
         console.error('Error creating profile:', profileError);
-        Alert.alert('Advertencia', 'Usuario creado, pero hubo un problema al guardar el perfil. Por favor contacta soporte.');
+        setLoading(false);
+        Alert.alert('Advertencia', 'Usuario creado, pero hubo un problema al guardar el perfil.');
         return;
       }
+
+      // 3. Create Initial Service (if Provider)
+      if (role === 'provider' && selectedCategory) {
+          // Find the category name
+          const catName = categories.find(c => c.id === selectedCategory)?.name || 'Servicio General';
+          
+          const { error: serviceError } = await supabase
+            .from('services')
+            .insert({
+                provider_id: data.user.id,
+                category_id: selectedCategory,
+                name: catName, // Critical: Use the category name
+                description: `Servicios profesionales de ${catName}`,
+                base_price: 0, 
+                active: true
+            });
+          
+          if (serviceError) {
+              console.error('Error creating initial service:', serviceError);
+          }
+      }
+
+      setLoading(false);
 
       Alert.alert(
         'Éxito',
@@ -130,20 +177,45 @@ export default function RegisterScreen() {
               </View>
             </View>
 
-            {/* Business Name Input (Provider Only) */}
+            {/* Provider Specific Fields */}
             {role === 'provider' && (
-              <View style={styles.inputContainer}>
-                <Text style={styles.label}>Nombre del Negocio</Text>
-                <View style={styles.inputWrapper}>
-                  <FontAwesome5 name="building" size={18} color="gray" style={styles.icon} />
-                  <TextInput
-                    placeholder="Ej. Eventos Mágicos"
-                    style={styles.input}
-                    value={businessName}
-                    onChangeText={setBusinessName}
-                  />
+              <>
+                <View style={styles.inputContainer}>
+                    <Text style={styles.label}>Nombre del Negocio</Text>
+                    <View style={styles.inputWrapper}>
+                    <FontAwesome5 name="building" size={18} color="gray" style={styles.icon} />
+                    <TextInput
+                        placeholder="Ej. Eventos Mágicos"
+                        style={styles.input}
+                        value={businessName}
+                        onChangeText={setBusinessName}
+                    />
+                    </View>
                 </View>
-              </View>
+
+                <View style={styles.inputContainer}>
+                    <Text style={styles.label}>Categoría Principal de Servicio</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesList}>
+                        {categories.map((cat) => (
+                            <TouchableOpacity
+                                key={cat.id}
+                                style={[
+                                    styles.categoryPill,
+                                    selectedCategory === cat.id && styles.categoryPillActive
+                                ]}
+                                onPress={() => setSelectedCategory(cat.id)}
+                            >
+                                <Text style={[
+                                    styles.categoryPillText,
+                                    selectedCategory === cat.id && styles.categoryPillTextActive
+                                ]}>
+                                    {cat.name.toLowerCase() === 'floristeria' ? 'Floreria' : cat.name}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                </View>
+              </>
             )}
 
             {/* Full Name Input */}
@@ -331,7 +403,7 @@ const styles = StyleSheet.create({
   },
   icon: {
     marginRight: 10,
-    width: 20, // Fixed width for alignment
+    width: 20,
     textAlign: 'center',
   },
   eyeIcon: {
@@ -341,6 +413,31 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     fontSize: 16,
+  },
+  categoriesList: {
+      flexDirection: 'row',
+      marginBottom: 5,
+  },
+  categoryPill: {
+      backgroundColor: '#f3f4f6',
+      paddingHorizontal: 15,
+      paddingVertical: 8,
+      borderRadius: 20,
+      marginRight: 10,
+      borderWidth: 1,
+      borderColor: '#eee',
+  },
+  categoryPillActive: {
+      backgroundColor: '#fee2e2', // Light red
+      borderColor: '#ef4444',
+  },
+  categoryPillText: {
+      fontSize: 13,
+      color: '#374151',
+  },
+  categoryPillTextActive: {
+      color: '#ef4444',
+      fontWeight: 'bold',
   },
   registerButton: {
     width: '100%',

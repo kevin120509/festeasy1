@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Ionicons, FontAwesome, MaterialIcons } from '@expo/vector-icons';
+import { Ionicons, FontAwesome, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 
 // Interfaces
@@ -127,33 +127,86 @@ export default function ProviderHomeScreen() {
     fetchProviderData().then(() => setRefreshing(false));
   }, [fetchProviderData]);
 
-  const renderNewRequest = ({ item }: { item: Request }) => (
-    <TouchableOpacity 
-      style={styles.requestCard}
-      onPress={() => router.push(`/request-detail/${item.id}`)}
-    >
-      <View style={styles.cardHeader}>
-        <View style={[styles.iconContainer, { backgroundColor: '#e0f2fe' }]}>
-          <Ionicons name={(item.service_categories?.icon as any) || 'apps'} size={24} color="#0284c7" />
+  const getCategoryIcon = (categoryName: string) => {
+    if (!categoryName) return { Lib: Ionicons, name: 'apps' };
+    
+    // Normalize: lowercase and remove accents
+    const normalized = categoryName
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    
+    if (normalized.includes('floreria') || normalized.includes('floristería')) {
+      return { Lib: Ionicons, name: 'flower' };
+    }
+    if (normalized.includes('pasteleria') || normalized.includes('postres') || normalized.includes('pastel')) {
+      return { Lib: MaterialCommunityIcons, name: 'cupcake' };
+    }
+    if (normalized.includes('iluminacion') || normalized.includes('luces')) {
+      return { Lib: MaterialCommunityIcons, name: 'lightbulb-on' };
+    }
+    if (normalized.includes('decoracion') || normalized.includes('globos')) {
+      return { Lib: MaterialCommunityIcons, name: 'balloon' };
+    }
+    if (normalized.includes('catering') || normalized.includes('comida') || normalized.includes('alimentos')) {
+      return { Lib: MaterialCommunityIcons, name: 'silverware-fork-knife' };
+    }
+    if (normalized.includes('musica') || normalized.includes('dj') || normalized.includes('sonido')) {
+      return { Lib: Ionicons, name: 'musical-notes' };
+    }
+    if (normalized.includes('foto') || normalized.includes('video')) {
+      return { Lib: Ionicons, name: 'camera' };
+    }
+    if (normalized.includes('mobiliario') || normalized.includes('sillas') || normalized.includes('mesas')) {
+      return { Lib: MaterialCommunityIcons, name: 'table-chair' };
+    }
+    if (normalized.includes('montaje') || normalized.includes('carpas')) {
+      return { Lib: MaterialCommunityIcons, name: 'hammer-wrench' };
+    }
+    if (normalized.includes('animacion') || normalized.includes('entretenimiento')) {
+      return { Lib: FontAwesome, name: 'magic' };
+    }
+    if (normalized.includes('bebidas') || normalized.includes('barra')) {
+      return { Lib: MaterialCommunityIcons, name: 'glass-cocktail' };
+    }
+    
+    // Default
+    return { Lib: Ionicons, name: 'apps' };
+  };
+
+  const renderNewRequest = ({ item }: { item: Request }) => {
+    const categoryName = item.service_categories?.name || '';
+    const { Lib, name } = getCategoryIcon(categoryName);
+    const categoryDisplayName = categoryName.toLowerCase() === 'floristeria' ? 'Floreria' : categoryName;
+    
+    return (
+      <TouchableOpacity 
+        style={styles.requestCard}
+        onPress={() => router.push(`/request-detail/${item.id}`)}
+      >
+        <View style={styles.cardHeader}>
+          <View style={[styles.iconContainer, { backgroundColor: '#e0f2fe' }]}>
+            <Lib name={name as any} size={24} color="#0284c7" />
+          </View>
+          <View style={styles.headerTextContainer}>
+              <Text style={styles.requestTitle} numberOfLines={1}>{item.title}</Text>
+              <Text style={styles.categoryText}>{categoryDisplayName}</Text>
+          </View>
         </View>
-        <View style={styles.headerTextContainer}>
-            <Text style={styles.requestTitle} numberOfLines={1}>{item.title}</Text>
-            <Text style={styles.categoryText}>{item.service_categories?.name}</Text>
+        
+        <View style={styles.cardFooter}>
+          <View style={styles.dateContainer}>
+              <Ionicons name="calendar-outline" size={14} color="gray" />
+              <Text style={styles.dateText}> {item.event_date}</Text>
+          </View>
+          <View style={styles.actionRow}>
+              <Text style={styles.actionText}>Ver detalle</Text>
+              <Ionicons name="arrow-forward" size={16} color="#ef4444" />
+          </View>
         </View>
-      </View>
-      
-      <View style={styles.cardFooter}>
-        <View style={styles.dateContainer}>
-            <Ionicons name="calendar-outline" size={14} color="gray" />
-            <Text style={styles.dateText}> {item.event_date}</Text>
-        </View>
-        <View style={styles.actionRow}>
-            <Text style={styles.actionText}>Ver detalle</Text>
-            <Ionicons name="arrow-forward" size={16} color="#ef4444" />
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
