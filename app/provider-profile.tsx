@@ -64,13 +64,30 @@ export default function ProviderProfileScreen() {
     );
   }
 
+  const renderNavItem = (item: { name: string; icon: any; active: boolean; route: string }) => (
+    <TouchableOpacity key={item.name} style={styles.navItem} onPress={() => item.route && router.push(item.route)}>
+      <Ionicons
+        name={item.icon}
+        size={26}
+        color={item.active ? '#ef4444' : 'gray'}
+      />
+      <Text style={[styles.navText, item.active && styles.navTextActive]}>
+        {item.name}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  const navItems = [
+    { name: 'Inicio', icon: 'home', active: false, route: '/provider-home' },
+    { name: 'Solicitudes', icon: 'list', active: false, route: '/provider-requests' },
+    { name: 'Chats', icon: 'chatbubble-ellipses', active: false, route: '/chats' },
+    { name: 'Perfil', icon: 'person', active: true, route: '/provider-profile' },
+  ];
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="black" />
-          </TouchableOpacity>
           <Text style={styles.headerTitle}>Mi Perfil</Text>
         </View>
 
@@ -103,6 +120,10 @@ export default function ProviderProfileScreen() {
             )}
           </TouchableOpacity>
         </ScrollView>
+
+        <View style={styles.navBar}>
+          {navItems.map(renderNavItem)}
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -120,14 +141,12 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 15,
     paddingHorizontal: 20,
     backgroundColor: '#F9FAFB',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
-  },
-  backButton: {
-    marginRight: 15,
   },
   headerTitle: {
     fontSize: 18,
@@ -136,7 +155,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 50,
+    paddingBottom: 100,
   },
   profileCard: {
     backgroundColor: '#fff',
@@ -196,6 +215,34 @@ const styles = StyleSheet.create({
   logoutButtonText: {
     color: 'white',
     fontSize: 16,
+    fontWeight: 'bold',
+  },
+  navBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    paddingBottom: 15,
+  },
+  navItem: {
+    alignItems: 'center',
+  },
+  navText: {
+    fontSize: 12,
+    color: 'gray',
+    marginTop: 2,
+  },
+  navTextActive: {
+    color: '#ef4444',
     fontWeight: 'bold',
   },
 });

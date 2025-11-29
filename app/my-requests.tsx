@@ -94,9 +94,14 @@ const RequestCard = ({ request, router }: { request: Request; router: any }) => 
         <Text style={styles.statusText}>
           Estado: <Text style={{fontWeight: 'bold', textTransform: 'capitalize'}}>{request.status}</Text>
         </Text>
-        <TouchableOpacity style={styles.reviewButton} onPress={() => router.push(`/request-detail/${request.id}`)}>
-          <Text style={styles.reviewButtonText}>Revisar</Text>
-        </TouchableOpacity>
+        <View style={styles.actionButtons}>
+          <TouchableOpacity style={styles.iconButton} onPress={() => router.push({ pathname: '/chats', params: { requestId: request.id } })}>
+            <Ionicons name="chatbubble-ellipses-outline" size={22} color="#ef4444" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.reviewButton} onPress={() => router.push(`/request-detail/${request.id}`)}>
+            <Text style={styles.reviewButtonText}>Revisar</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -319,6 +324,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: 'gray',
     fontWeight: '500',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconButton: {
+    padding: 8,
+    marginRight: 8,
+    backgroundColor: '#fef2f2',
+    borderRadius: 20,
   },
   reviewButton: {
     backgroundColor: '#ef4444',

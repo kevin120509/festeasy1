@@ -28,6 +28,8 @@ export default function RootLayout() {
       <Stack.Screen name="provider-home" options={{ headerShown: false }} />
       <Stack.Screen name="provider-profile" options={{ headerShown: false }} />
       <Stack.Screen name="client-profile" options={{ headerShown: false }} />
+      <Stack.Screen name="chats" options={{ headerShown: false }} />
+      <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="service-request" options={{ headerShown: false }} />
       <Stack.Screen name="my-requests" options={{ headerShown: false }} />
       <Stack.Screen name="recent-requests" options={{ headerShown: false }} />

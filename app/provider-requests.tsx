@@ -35,6 +35,7 @@ interface QuotedRequest extends Request {
 const navItems = [
   { name: 'Inicio', icon: 'home', active: false, route: '/provider-home' },
   { name: 'Solicitudes', icon: 'list', active: true, route: '/provider-requests' },
+  { name: 'Chats', icon: 'chatbubble-ellipses', active: false, route: '/chats' },
   { name: 'Perfil', icon: 'person', active: false, route: '/provider-profile' },
 ];
 

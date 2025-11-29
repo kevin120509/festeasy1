@@ -38,6 +38,8 @@ export default function ProposalDetailScreen() {
         .select(`
           *,
           requests (
+            id,
+            client_id,
             title,
             event_date,
             location,
@@ -66,11 +68,65 @@ export default function ProposalDetailScreen() {
     }
   };
 
+  const handleContactProvider = async () => {
+    try {
+      // setLoading(true); // Don't block UI completely, maybe just button
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !quote) return;
+
+      const clientId = quote.requests.client_id;
+      const providerId = quote.provider_id;
+      const requestId = quote.request_id;
+
+      // Check if channel exists
+      const { data: existingChannel, error: fetchError } = await supabase
+        .from('chat_channels')
+        .select('id')
+        .eq('request_id', requestId)
+        .eq('client_id', clientId)
+        .eq('provider_id', providerId)
+        .maybeSingle(); // Use maybeSingle to avoid error if not found
+
+      if (existingChannel) {
+        router.push(`/chat/${existingChannel.id}`);
+        return;
+      }
+
+      // Create new channel
+      console.log('Creating chat channel for:', { requestId, clientId, providerId });
+      
+      const { data: newChannel, error: createError } = await supabase
+        .from('chat_channels')
+        .insert({
+          request_id: requestId,
+          client_id: clientId,
+          provider_id: providerId
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('Supabase create channel error:', createError);
+        throw createError;
+      }
+      
+      if (newChannel) {
+        router.push(`/chat/${newChannel.id}`);
+      }
+
+    } catch (error: any) {
+      console.error('Error initiating chat:', error);
+      if (error.message?.includes('row-level security') || error.code === '42501') {
+          Alert.alert('Error de Permisos', 'No tienes permiso para crear un chat. Ejecuta el script SQL de políticas.');
+      } else {
+          Alert.alert('Error', `No se pudo iniciar el chat: ${error.message || 'Error desconocido'}`);
+      }
+    }
+  };
+
   const handleAcceptProposal = async () => {
     if (!quote) return;
     Alert.alert('Funcionalidad', 'Aquí iría la lógica para aceptar la propuesta y proceder al pago.');
-    // Logic to update quote status to 'accepted' and request status to 'hired' would go here.
-    // router.push('/confirm-payment');
   };
 
   if (loading) {
@@ -173,10 +229,14 @@ export default function ProposalDetailScreen() {
           {!isProvider && (
             <View style={styles.card}>
                 <Text style={styles.sectionTitle}>Sobre el Proveedor</Text>
-                <Text style={styles.providerName}>{provider?.business_name}</Text>
-                <Text style={styles.providerContact}>{provider?.full_name}</Text>
-                <Text style={styles.providerContact}>{provider?.email}</Text>
-                <Text style={styles.providerContact}>{provider?.phone}</Text>
+                <Text style={styles.providerName}>{provider?.business_name || provider?.full_name || 'Proveedor'}</Text>
+                <Text style={styles.providerContact}>{provider?.email || 'Email no disponible'}</Text>
+                <Text style={styles.providerContact}>{provider?.phone || 'Teléfono no disponible'}</Text>
+                
+                <TouchableOpacity style={styles.chatButton} onPress={handleContactProvider}>
+                    <Ionicons name="chatbubble-ellipses-outline" size={20} color="white" style={{ marginRight: 8 }} />
+                    <Text style={styles.chatButtonText}>Enviar Mensaje</Text>
+                </TouchableOpacity>
             </View>
           )}
 
@@ -185,14 +245,19 @@ export default function ProposalDetailScreen() {
         {/* Footer Actions */}
         <View style={styles.footer}>
           {!isProvider && quote.status === 'pending' ? (
-             <TouchableOpacity
-                style={styles.chooseProviderButton}
-                onPress={handleAcceptProposal}
-              >
-                <Text style={styles.chooseProviderButtonText}>Elegir este proveedor</Text>
-             </TouchableOpacity>
+             <View style={styles.footerButtons}>
+                 <TouchableOpacity style={[styles.footerBtn, styles.backButtonFooter]} onPress={() => router.back()}>
+                    <Text style={styles.backButtonFooterText}>Volver</Text>
+                 </TouchableOpacity>
+                 <TouchableOpacity
+                    style={[styles.footerBtn, styles.chooseProviderButton]}
+                    onPress={handleAcceptProposal}
+                  >
+                    <Text style={styles.chooseProviderButtonText}>Elegir proveedor</Text>
+                 </TouchableOpacity>
+             </View>
           ) : (
-             <TouchableOpacity style={styles.backButtonFooter} onPress={() => router.back()}>
+             <TouchableOpacity style={[styles.footerBtn, styles.backButtonFooter, { width: '100%' }]} onPress={() => router.back()}>
                 <Text style={styles.backButtonFooterText}>Volver</Text>
              </TouchableOpacity>
           )}
@@ -230,7 +295,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 100,
+    paddingBottom: 150, // Increased padding to ensure footer doesn't cover content
   },
   card: {
     backgroundColor: 'white',
@@ -332,6 +397,20 @@ const styles = StyleSheet.create({
       color: '#555',
       marginBottom: 2,
   },
+  chatButton: {
+      flexDirection: 'row',
+      backgroundColor: '#ef4444', // Red
+      padding: 12,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 15,
+  },
+  chatButtonText: {
+      color: 'white',
+      fontWeight: 'bold',
+      fontSize: 14,
+  },
 
   footer: {
     position: 'absolute',
@@ -339,20 +418,24 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: '#fff',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
     paddingVertical: 15,
     paddingHorizontal: 20,
     borderTopWidth: 1,
     borderTopColor: '#eee',
   },
+  footerButtons: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+  },
+  footerBtn: {
+      borderRadius: 10,
+      paddingVertical: 15,
+      alignItems: 'center',
+      justifyContent: 'center',
+  },
   chooseProviderButton: {
     backgroundColor: '#ef4444',
-    borderRadius: 10,
-    paddingVertical: 15,
-    width: '100%',
-    alignItems: 'center',
+    width: '68%',
   },
   chooseProviderButtonText: {
     color: 'white',
@@ -361,10 +444,7 @@ const styles = StyleSheet.create({
   },
   backButtonFooter: {
     backgroundColor: '#f3f4f6',
-    borderRadius: 10,
-    paddingVertical: 15,
-    width: '100%',
-    alignItems: 'center',
+    width: '30%',
   },
   backButtonFooterText: {
     color: '#374151',

@@ -29,6 +29,7 @@ interface Request {
 const navItems = [
   { name: 'Inicio', icon: 'home', active: true, route: '/provider-home' },
   { name: 'Solicitudes', icon: 'list', active: false, route: '/provider-requests' },
+  { name: 'Chats', icon: 'chatbubble-ellipses', active: false, route: '/chats' },
   { name: 'Perfil', icon: 'person', active: false, route: '/provider-profile' },
 ];
 
