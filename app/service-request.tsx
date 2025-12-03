@@ -6,13 +6,15 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import DateTimePicker from 'react-native-modal-datetime-picker';
 
 export default function ServiceRequestScreen() {
   const router = useRouter();
@@ -40,6 +42,36 @@ export default function ServiceRequestScreen() {
   const [location, setLocation] = useState(initialLocation);
   const [guestCount, setGuestCount] = useState(initialGuestCount);
   const [loading, setLoading] = useState(false);
+
+  const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
+  const [isTimePickerVisible, setTimePickerVisibility] = useState(false);
+
+  const showDatePicker = () => {
+    setDatePickerVisibility(true);
+  };
+
+  const hideDatePicker = () => {
+    setDatePickerVisibility(false);
+  };
+
+  const handleConfirmDate = (date: Date) => {
+    setEventDate(date.toISOString().split('T')[0]); // Format as YYYY-MM-DD
+    hideDatePicker();
+  };
+
+  const showTimePicker = () => {
+    setTimePickerVisibility(true);
+  };
+
+  const hideTimePicker = () => {
+    setTimePickerVisibility(false);
+  };
+
+  const handleConfirmTime = (date: Date) => {
+    setEventTime(date.toTimeString().split(' ')[0].substring(0, 5)); // Format as HH:MM
+    hideTimePicker();
+  };
+
 
   const handleSubmit = async () => {
     if (!description || !eventDate || !eventTime || !location || !guestCount) {
@@ -133,29 +165,35 @@ export default function ServiceRequestScreen() {
 
             {/* Date and Time Row */}
             <View style={styles.row}>
+            {/* Date Input */}
+            <View style={[styles.inputGroup, styles.halfInput]}>
+                <Text style={styles.label}>Fecha</Text>
+                <TouchableOpacity onPress={showDatePicker} style={styles.inputContainer}>
+                    <Ionicons name="calendar-outline" size={20} color="gray" style={styles.icon} />
+                    <Text style={styles.datePickerText}>{eventDate || 'Selecciona una fecha'}</Text>
+                </TouchableOpacity>
+                <DateTimePicker
+                    isVisible={isDatePickerVisible}
+                    mode="date"
+                    onConfirm={handleConfirmDate}
+                    onCancel={hideDatePicker}
+                    date={eventDate ? new Date(eventDate) : new Date()}
+                />
+            </View>
                 <View style={[styles.inputGroup, styles.halfInput]}>
-                    <Text style={styles.label}>Fecha (AAAA-MM-DD)</Text>
-                    <View style={styles.inputContainer}>
-                        <Ionicons name="calendar-outline" size={20} color="gray" style={styles.icon} />
-                        <TextInput 
-                          style={styles.input} 
-                          placeholder="2024-12-31" 
-                          value={eventDate}
-                          onChangeText={setEventDate}
-                        />
-                    </View>
-                </View>
-                <View style={[styles.inputGroup, styles.halfInput]}>
-                    <Text style={styles.label}>Hora (HH:MM)</Text>
-                    <View style={styles.inputContainer}>
+                    <Text style={styles.label}>Hora</Text>
+                    <TouchableOpacity onPress={showTimePicker} style={styles.inputContainer}>
                         <Ionicons name="time-outline" size={20} color="gray" style={styles.icon} />
-                        <TextInput 
-                          style={styles.input} 
-                          placeholder="14:00" 
-                          value={eventTime}
-                          onChangeText={setEventTime}
-                        />
-                    </View>
+                        <Text style={styles.datePickerText}>{eventTime || 'Selecciona una hora'}</Text>
+                    </TouchableOpacity>
+                    <DateTimePicker
+                        isVisible={isTimePickerVisible}
+                        mode="time"
+                        onConfirm={handleConfirmTime}
+                        onCancel={hideTimePicker}
+                        date={eventTime ? new Date(`2000-01-01T${eventTime}:00`) : new Date()}
+                        is24Hour={true}
+                    />
                 </View>
             </View>
 
@@ -241,6 +279,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     borderWidth: 0,
     flex: 1,
+  },
+  datePickerText: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 16,
+    borderWidth: 0,
+    flex: 1,
+    color: '#333', // Ensure text color is visible
   },
   multilineInput: {
     height: 100,
